@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { getClipSuggestions, approveClip, rejectClip, getClipPreviewUrl } from '../api/client';
-import type { ClipSuggestion, Platform } from '../types';
+import { getClipSuggestions, approveClip, rejectClip, getClipPreviewUrl, getTranscript } from '../api/client';
+import type { ClipSuggestion, Platform, Transcript } from '../types';
 
 interface ClipSuggestionsProps {
   videoId: string;
@@ -28,12 +28,12 @@ const PLATFORM_COLORS: Record<Platform, { bg: string; text: string; border: stri
 
 type EditPreset = 'youtube_shorts' | 'tiktok' | 'linkedin' | 'podcast' | 'off';
 
-const PRESET_INFO: Record<EditPreset, { label: string; description: string }> = {
-  youtube_shorts: { label: 'YT Shorts', description: 'Aggressive - fastest pacing' },
-  tiktok: { label: 'TikTok', description: 'Fast - punchy cuts' },
-  linkedin: { label: 'LinkedIn', description: 'Moderate - professional' },
-  podcast: { label: 'Podcast', description: 'Light - natural speech' },
-  off: { label: 'Raw', description: 'No editing' },
+const PRESET_INFO: Record<EditPreset, { label: string; description: string; reduction: number }> = {
+  youtube_shorts: { label: 'YT Shorts', description: 'Aggressive - fastest pacing', reduction: 0.35 },
+  tiktok: { label: 'TikTok', description: 'Fast - punchy cuts', reduction: 0.30 },
+  linkedin: { label: 'LinkedIn', description: 'Moderate - professional', reduction: 0.20 },
+  podcast: { label: 'Podcast', description: 'Light - natural speech', reduction: 0.10 },
+  off: { label: 'Raw', description: 'No editing', reduction: 0 },
 };
 
 export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps) {
@@ -43,6 +43,9 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [playingClipId, setPlayingClipId] = useState<string | null>(null);
   const [editPreset, setEditPreset] = useState<EditPreset>('linkedin');
+  const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<Transcript | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const handlePresetChange = (preset: EditPreset) => {
@@ -55,11 +58,25 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
   };
 
   useEffect(() => {
-    const fetchClips = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const data = await getClipSuggestions(videoId);
-        setClips(data);
+        const [clipsData, transcriptData] = await Promise.all([
+          getClipSuggestions(videoId),
+          getTranscript(videoId).catch(() => null)
+        ]);
+        setClips(clipsData);
+        setTranscript(transcriptData);
+
+        // Estimate video duration from transcript or clips
+        if (transcriptData?.segments?.length) {
+          const lastSegment = transcriptData.segments[transcriptData.segments.length - 1];
+          setVideoDuration(lastSegment.end || 0);
+        } else if (clipsData.length) {
+          const maxEnd = Math.max(...clipsData.map(c => c.end_time));
+          setVideoDuration(maxEnd * 1.1); // Add 10% buffer
+        }
+
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load suggestions');
@@ -68,7 +85,7 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
       }
     };
 
-    fetchClips();
+    fetchData();
   }, [videoId]);
 
   const handleApprove = async (clipId: string) => {
@@ -99,7 +116,9 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
     }
   };
 
-  const handlePlayClip = (clip: ClipSuggestion) => {
+  const handlePlayClip = (clip: ClipSuggestion, e: React.MouseEvent) => {
+    e.stopPropagation();
+
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -137,6 +156,33 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
     });
 
     setPlayingClipId(clip.id);
+  };
+
+  const handleClipClick = (clip: ClipSuggestion) => {
+    if (expandedClipId === clip.id) {
+      setExpandedClipId(null);
+    } else {
+      setExpandedClipId(clip.id);
+      onClipSelect?.(clip);
+    }
+  };
+
+  const getClipTranscript = (clip: ClipSuggestion): string => {
+    if (!transcript?.segments) return clip.transcript_excerpt || '';
+
+    const relevantSegments = transcript.segments.filter(
+      seg => seg.start >= clip.start_time && seg.end <= clip.end_time
+    );
+
+    if (relevantSegments.length === 0) {
+      // Try partial overlap
+      const overlapping = transcript.segments.filter(
+        seg => seg.end > clip.start_time && seg.start < clip.end_time
+      );
+      return overlapping.map(s => s.text).join(' ') || clip.transcript_excerpt || '';
+    }
+
+    return relevantSegments.map(s => s.text).join(' ');
   };
 
   useEffect(() => {
@@ -220,116 +266,234 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
           const duration = clip.end_time - clip.start_time;
           const isLoading = actionLoading === clip.id;
           const isPlaying = playingClipId === clip.id;
+          const isExpanded = expandedClipId === clip.id;
 
           return (
             <div
               key={clip.id}
-              className={`p-3 sm:p-4 transition-opacity ${clip.status === 'rejected' ? 'opacity-40' : ''}`}
+              className={`transition-all ${clip.status === 'rejected' ? 'opacity-40' : ''}`}
             >
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                {/* Play button + info */}
-                <div className="flex items-start gap-3 flex-1">
-                  {/* Play button */}
-                  <button
-                    onClick={() => handlePlayClip(clip)}
-                    className={`
-                      flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full
-                      transition-all touch-manipulation active:scale-95
-                      ${isPlaying
-                        ? 'bg-white text-zinc-900'
-                        : 'bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300'
-                      }
-                    `}
-                  >
-                    {isPlaying ? (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    )}
-                  </button>
+              {/* Main clip row */}
+              <div
+                className="p-3 sm:p-4 cursor-pointer hover:bg-zinc-800/50 active:bg-zinc-800 transition-colors"
+                onClick={() => handleClipClick(clip)}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                  {/* Play button + info */}
+                  <div className="flex items-start gap-3 flex-1">
+                    {/* Play button */}
+                    <button
+                      onClick={(e) => handlePlayClip(clip, e)}
+                      className={`
+                        flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full
+                        transition-all touch-manipulation active:scale-95
+                        ${isPlaying
+                          ? 'bg-white text-zinc-900'
+                          : 'bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300'
+                        }
+                      `}
+                    >
+                      {isPlaying ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                    </button>
 
-                  <div
-                    className="flex-1 cursor-pointer min-w-0"
-                    onClick={() => onClipSelect?.(clip)}
-                  >
-                    {/* Platform badge and time */}
-                    <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-                      <span className={`
-                        text-xs font-medium px-2 py-0.5 rounded-full border
-                        ${colors.bg} ${colors.text} ${colors.border}
-                      `}>
-                        {clip.platform.toUpperCase()}
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        {formatTime(clip.start_time)} - {formatTime(clip.end_time)}
-                      </span>
-                      <span className="text-xs text-zinc-600">
-                        ({formatDuration(duration)})
-                      </span>
-                    </div>
-
-                    {/* Hook reason */}
-                    {clip.hook_reason && (
-                      <p className="text-sm text-zinc-300 mb-1 line-clamp-2">
-                        {clip.hook_reason}
-                      </p>
-                    )}
-
-                    {/* Confidence score */}
-                    {clip.confidence_score !== undefined && (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1 bg-zinc-800 rounded-full max-w-20">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${clip.confidence_score * 100}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-zinc-500">
-                          {Math.round(clip.confidence_score * 100)}%
+                    <div className="flex-1 min-w-0">
+                      {/* Platform badge and time */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                        <span className={`
+                          text-xs font-medium px-2 py-0.5 rounded-full border
+                          ${colors.bg} ${colors.text} ${colors.border}
+                        `}>
+                          {clip.platform.toUpperCase()}
                         </span>
+                        <span className="text-xs text-zinc-500">
+                          {formatTime(clip.start_time)} - {formatTime(clip.end_time)}
+                        </span>
+                        <span className="text-xs text-zinc-600">
+                          ({formatDuration(duration)})
+                        </span>
+                        {/* Expand indicator */}
+                        <svg
+                          className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </div>
+
+                      {/* Hook reason */}
+                      {clip.hook_reason && (
+                        <p className="text-sm text-zinc-300 mb-1 line-clamp-2">
+                          {clip.hook_reason}
+                        </p>
+                      )}
+
+                      {/* Confidence score */}
+                      {clip.confidence_score !== undefined && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1 bg-zinc-800 rounded-full max-w-20">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full"
+                              style={{ width: `${clip.confidence_score * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-zinc-500">
+                            {Math.round(clip.confidence_score * 100)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex sm:flex-col gap-2 ml-15 sm:ml-0" onClick={(e) => e.stopPropagation()}>
+                    {clip.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(clip.id)}
+                          disabled={isLoading}
+                          className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium bg-emerald-500/10 text-emerald-400 rounded-lg hover:bg-emerald-500/20 active:bg-emerald-500/30 disabled:opacity-50 touch-manipulation border border-emerald-500/20"
+                        >
+                          {isLoading ? '...' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={() => handleReject(clip.id)}
+                          disabled={isLoading}
+                          className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-50 touch-manipulation"
+                        >
+                          {isLoading ? '...' : 'Reject'}
+                        </button>
+                      </>
+                    )}
+
+                    {clip.status === 'approved' && (
+                      <span className="px-4 py-2 text-sm font-medium text-emerald-400 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-center">
+                        Approved
+                      </span>
+                    )}
+
+                    {clip.status === 'rejected' && (
+                      <span className="px-4 py-2 text-sm font-medium text-zinc-500 bg-zinc-800 rounded-lg text-center">
+                        Rejected
+                      </span>
                     )}
                   </div>
                 </div>
-
-                {/* Actions */}
-                <div className="flex sm:flex-col gap-2 ml-15 sm:ml-0">
-                  {clip.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => handleApprove(clip.id)}
-                        disabled={isLoading}
-                        className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium bg-emerald-500/10 text-emerald-400 rounded-lg hover:bg-emerald-500/20 active:bg-emerald-500/30 disabled:opacity-50 touch-manipulation border border-emerald-500/20"
-                      >
-                        {isLoading ? '...' : 'Approve'}
-                      </button>
-                      <button
-                        onClick={() => handleReject(clip.id)}
-                        disabled={isLoading}
-                        className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-50 touch-manipulation"
-                      >
-                        {isLoading ? '...' : 'Reject'}
-                      </button>
-                    </>
-                  )}
-
-                  {clip.status === 'approved' && (
-                    <span className="px-4 py-2 text-sm font-medium text-emerald-400 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-center">
-                      Approved
-                    </span>
-                  )}
-
-                  {clip.status === 'rejected' && (
-                    <span className="px-4 py-2 text-sm font-medium text-zinc-500 bg-zinc-800 rounded-lg text-center">
-                      Rejected
-                    </span>
-                  )}
-                </div>
               </div>
+
+              {/* Expanded preview panel */}
+              {isExpanded && (
+                <div className="px-3 sm:px-4 pb-4 bg-zinc-800/30 border-t border-zinc-800">
+                  {/* Timeline visualization */}
+                  <div className="pt-4 pb-3">
+                    <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+                      <span>0:00</span>
+                      <span className="text-zinc-400">Clip position in video</span>
+                      <span>{formatTime(videoDuration)}</span>
+                    </div>
+                    <div className="relative h-6 bg-zinc-800 rounded-lg overflow-hidden">
+                      {/* Full video bar */}
+                      <div className="absolute inset-0 bg-zinc-700/50" />
+                      {/* Clip position */}
+                      <div
+                        className="absolute top-0 bottom-0 bg-white/20 border-l-2 border-r-2 border-white"
+                        style={{
+                          left: `${(clip.start_time / videoDuration) * 100}%`,
+                          width: `${((clip.end_time - clip.start_time) / videoDuration) * 100}%`,
+                        }}
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-[10px] font-medium text-white drop-shadow">
+                            {formatDuration(duration)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Duration comparison by edit style */}
+                  <div className="mb-4">
+                    <p className="text-xs text-zinc-500 mb-2">Estimated duration by edit style:</p>
+                    <div className="grid grid-cols-5 gap-1">
+                      {(Object.keys(PRESET_INFO) as EditPreset[]).map((preset) => {
+                        const info = PRESET_INFO[preset];
+                        const estimatedDuration = duration * (1 - info.reduction);
+                        const isActive = editPreset === preset;
+                        return (
+                          <button
+                            key={preset}
+                            onClick={() => handlePresetChange(preset)}
+                            className={`
+                              p-2 rounded-lg text-center transition-all touch-manipulation
+                              ${isActive
+                                ? 'bg-white text-zinc-900'
+                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                              }
+                            `}
+                          >
+                            <div className="text-[10px] font-medium">{info.label}</div>
+                            <div className={`text-sm font-bold ${isActive ? 'text-zinc-900' : 'text-zinc-300'}`}>
+                              {formatDuration(estimatedDuration)}
+                            </div>
+                            <div className={`text-[10px] ${isActive ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                              {info.reduction > 0 ? `-${Math.round(info.reduction * 100)}%` : 'Full'}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Transcript excerpt */}
+                  <div>
+                    <p className="text-xs text-zinc-500 mb-2">Transcript excerpt:</p>
+                    <div className="bg-zinc-900 rounded-lg p-3 max-h-32 overflow-y-auto">
+                      <p className="text-sm text-zinc-300 leading-relaxed">
+                        {getClipTranscript(clip) || 'No transcript available for this clip.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Play controls in expanded view */}
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      onClick={(e) => handlePlayClip(clip, e)}
+                      className={`
+                        flex-1 py-3 rounded-lg font-medium text-sm transition-all touch-manipulation flex items-center justify-center gap-2
+                        ${isPlaying
+                          ? 'bg-white text-zinc-900'
+                          : 'bg-zinc-700 text-white hover:bg-zinc-600 active:bg-zinc-500'
+                        }
+                      `}
+                    >
+                      {isPlaying ? (
+                        <>
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                          </svg>
+                          Stop Preview
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                          Play {PRESET_INFO[editPreset].label} Version
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
