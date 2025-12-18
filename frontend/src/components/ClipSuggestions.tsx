@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { getClipSuggestions, approveClip, rejectClip, getClipPreviewUrl, getTranscript } from '../api/client';
+import { getClipSuggestions, approveClip, rejectClip, getClipPreviewUrl, getTranscript, getAudioUrl, updateClip } from '../api/client';
 import type { ClipSuggestion, Platform, Transcript } from '../types';
+import { WaveformEditor } from './WaveformEditor';
 
 interface ClipSuggestionsProps {
   videoId: string;
@@ -45,8 +46,36 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
   const [editPreset, setEditPreset] = useState<EditPreset>('linkedin');
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
-  const [videoDuration, setVideoDuration] = useState<number>(0);
+  const [modifiedBoundaries, setModifiedBoundaries] = useState<Record<string, { start: number; end: number }>>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Get effective clip boundaries (modified or original)
+  const getClipBoundaries = (clip: ClipSuggestion) => {
+    const modified = modifiedBoundaries[clip.id];
+    return {
+      start: modified?.start ?? clip.start_time,
+      end: modified?.end ?? clip.end_time,
+    };
+  };
+
+  // Handle waveform boundary changes
+  const handleBoundaryChange = async (clipId: string, start: number, end: number) => {
+    setModifiedBoundaries(prev => ({
+      ...prev,
+      [clipId]: { start, end },
+    }));
+
+    // Debounced save to backend
+    try {
+      await updateClip(clipId, { start_time: start, end_time: end });
+      // Update local clip state
+      setClips(clips.map(c =>
+        c.id === clipId ? { ...c, start_time: start, end_time: end } : c
+      ));
+    } catch (err) {
+      console.error('Failed to update clip boundaries:', err);
+    }
+  };
 
   const handlePresetChange = (preset: EditPreset) => {
     if (audioRef.current) {
@@ -67,16 +96,6 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
         ]);
         setClips(clipsData);
         setTranscript(transcriptData);
-
-        // Estimate video duration from transcript or clips
-        if (transcriptData?.segments?.length) {
-          const lastSegment = transcriptData.segments[transcriptData.segments.length - 1];
-          setVideoDuration(lastSegment.end || 0);
-        } else if (clipsData.length) {
-          const maxEnd = Math.max(...clipsData.map(c => c.end_time));
-          setVideoDuration(maxEnd * 1.1); // Add 10% buffer
-        }
-
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load suggestions');
@@ -390,31 +409,15 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
               {/* Expanded preview panel */}
               {isExpanded && (
                 <div className="px-3 sm:px-4 pb-4 bg-zinc-800/30 border-t border-zinc-800">
-                  {/* Timeline visualization */}
+                  {/* Waveform visualization */}
                   <div className="pt-4 pb-3">
-                    <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-                      <span>0:00</span>
-                      <span className="text-zinc-400">Clip position in video</span>
-                      <span>{formatTime(videoDuration)}</span>
-                    </div>
-                    <div className="relative h-6 bg-zinc-800 rounded-lg overflow-hidden">
-                      {/* Full video bar */}
-                      <div className="absolute inset-0 bg-zinc-700/50" />
-                      {/* Clip position */}
-                      <div
-                        className="absolute top-0 bottom-0 bg-white/20 border-l-2 border-r-2 border-white"
-                        style={{
-                          left: `${(clip.start_time / videoDuration) * 100}%`,
-                          width: `${((clip.end_time - clip.start_time) / videoDuration) * 100}%`,
-                        }}
-                      >
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-[10px] font-medium text-white drop-shadow">
-                            {formatDuration(duration)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    <WaveformEditor
+                      audioUrl={getAudioUrl(videoId)}
+                      startTime={getClipBoundaries(clip).start}
+                      endTime={getClipBoundaries(clip).end}
+                      onBoundaryChange={(start, end) => handleBoundaryChange(clip.id, start, end)}
+                      compact
+                    />
                   </div>
 
                   {/* Duration comparison by edit style */}
@@ -423,7 +426,9 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
                     <div className="grid grid-cols-5 gap-1">
                       {(Object.keys(PRESET_INFO) as EditPreset[]).map((preset) => {
                         const info = PRESET_INFO[preset];
-                        const estimatedDuration = duration * (1 - info.reduction);
+                        const bounds = getClipBoundaries(clip);
+                        const clipDuration = bounds.end - bounds.start;
+                        const estimatedDuration = clipDuration * (1 - info.reduction);
                         const isActive = editPreset === preset;
                         return (
                           <button
@@ -458,36 +463,6 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
                         {getClipTranscript(clip) || 'No transcript available for this clip.'}
                       </p>
                     </div>
-                  </div>
-
-                  {/* Play controls in expanded view */}
-                  <div className="mt-4 flex items-center gap-2">
-                    <button
-                      onClick={(e) => handlePlayClip(clip, e)}
-                      className={`
-                        flex-1 py-3 rounded-lg font-medium text-sm transition-all touch-manipulation flex items-center justify-center gap-2
-                        ${isPlaying
-                          ? 'bg-white text-zinc-900'
-                          : 'bg-zinc-700 text-white hover:bg-zinc-600 active:bg-zinc-500'
-                        }
-                      `}
-                    >
-                      {isPlaying ? (
-                        <>
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                          </svg>
-                          Stop Preview
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                          Play {PRESET_INFO[editPreset].label} Version
-                        </>
-                      )}
-                    </button>
                   </div>
                 </div>
               )}
