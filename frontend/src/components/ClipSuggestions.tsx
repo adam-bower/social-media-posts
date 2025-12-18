@@ -184,29 +184,29 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
 
   return (
     <div className="bg-white rounded-lg shadow-sm border">
-      <div className="p-4 border-b bg-gray-50">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-3 sm:p-4 border-b bg-gray-50">
+        <div className="flex items-center justify-between mb-2 sm:mb-3">
           <div>
-            <h3 className="font-semibold text-gray-800">Clip Suggestions</h3>
-            <p className="text-sm text-gray-500">
+            <h3 className="font-semibold text-gray-800 text-sm sm:text-base">Clip Suggestions</h3>
+            <p className="text-xs sm:text-sm text-gray-500">
               {pendingClips.length} pending | {approvedClips.length} approved | {rejectedClips.length} rejected
             </p>
           </div>
         </div>
 
-        {/* Edit preset selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Edit style:</span>
+        {/* Edit preset selector - horizontal scroll on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">Edit:</span>
           <div className="flex gap-1">
             {(Object.keys(PRESET_INFO) as EditPreset[]).map((preset) => (
               <button
                 key={preset}
                 onClick={() => handlePresetChange(preset)}
                 className={`
-                  px-2 py-1 text-xs rounded-md transition-colors
+                  px-3 py-2 text-xs sm:text-sm rounded-lg transition-colors whitespace-nowrap touch-manipulation
                   ${editPreset === preset
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 active:bg-gray-400'
                   }
                 `}
                 title={PRESET_INFO[preset].description}
@@ -231,98 +231,102 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
           return (
             <div
               key={clip.id}
-              className={`p-4 ${clip.status === 'rejected' ? 'opacity-50' : ''}`}
+              className={`p-3 sm:p-4 ${clip.status === 'rejected' ? 'opacity-50' : ''}`}
             >
-              <div className="flex items-start justify-between gap-4">
-                {/* Play button */}
-                <button
-                  onClick={() => handlePlayClip(clip)}
-                  className={`
-                    flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full
-                    transition-colors
-                    ${isPlaying
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                    }
-                  `}
-                  title={isPlaying ? 'Stop' : 'Play clip preview'}
-                >
-                  {isPlaying ? (
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  )}
-                </button>
+              {/* Mobile: stacked layout, Desktop: row layout */}
+              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                {/* Top row on mobile: Play button + info */}
+                <div className="flex items-start gap-3 flex-1">
+                  {/* Play button - larger on mobile for better touch */}
+                  <button
+                    onClick={() => handlePlayClip(clip)}
+                    className={`
+                      flex-shrink-0 w-12 h-12 sm:w-10 sm:h-10 flex items-center justify-center rounded-full
+                      transition-colors touch-manipulation active:scale-95
+                      ${isPlaying
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-600'
+                      }
+                    `}
+                    title={isPlaying ? 'Stop' : 'Play clip preview'}
+                  >
+                    {isPlaying ? (
+                      <svg className="w-5 h-5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 sm:w-4 sm:h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    )}
+                  </button>
 
-                <div
-                  className="flex-1 cursor-pointer"
-                  onClick={() => onClipSelect?.(clip)}
-                >
-                  {/* Platform badge and time */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`
-                      text-xs font-medium px-2 py-1 rounded-full
-                      ${colors.bg} ${colors.text}
-                    `}>
-                      {clip.platform.toUpperCase()}
-                    </span>
-                    <span className="text-sm text-gray-600">
-                      {formatTime(clip.start_time)} - {formatTime(clip.end_time)}
-                    </span>
-                    <span className="text-sm text-gray-400">
-                      ({formatDuration(duration)})
-                    </span>
-                  </div>
-
-                  {/* Hook reason */}
-                  {clip.hook_reason && (
-                    <p className="text-sm text-gray-700 mb-2">
-                      <span className="font-medium">Hook:</span> {clip.hook_reason}
-                    </p>
-                  )}
-
-                  {/* Transcript excerpt */}
-                  {clip.transcript_excerpt && (
-                    <p className="text-sm text-gray-500 italic line-clamp-2">
-                      "{clip.transcript_excerpt}"
-                    </p>
-                  )}
-
-                  {/* Confidence score */}
-                  {clip.confidence_score !== undefined && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-gray-200 rounded-full max-w-24">
-                        <div
-                          className="h-full bg-green-500 rounded-full"
-                          style={{ width: `${clip.confidence_score * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {Math.round(clip.confidence_score * 100)}% confidence
+                  <div
+                    className="flex-1 cursor-pointer min-w-0"
+                    onClick={() => onClipSelect?.(clip)}
+                  >
+                    {/* Platform badge and time */}
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                      <span className={`
+                        text-xs font-medium px-2 py-0.5 sm:py-1 rounded-full
+                        ${colors.bg} ${colors.text}
+                      `}>
+                        {clip.platform.toUpperCase()}
+                      </span>
+                      <span className="text-xs sm:text-sm text-gray-600">
+                        {formatTime(clip.start_time)} - {formatTime(clip.end_time)}
+                      </span>
+                      <span className="text-xs sm:text-sm text-gray-400">
+                        ({formatDuration(duration)})
                       </span>
                     </div>
-                  )}
+
+                    {/* Hook reason */}
+                    {clip.hook_reason && (
+                      <p className="text-xs sm:text-sm text-gray-700 mb-1 sm:mb-2 line-clamp-2">
+                        <span className="font-medium">Hook:</span> {clip.hook_reason}
+                      </p>
+                    )}
+
+                    {/* Transcript excerpt - hidden on mobile to save space */}
+                    {clip.transcript_excerpt && (
+                      <p className="hidden sm:block text-sm text-gray-500 italic line-clamp-2">
+                        "{clip.transcript_excerpt}"
+                      </p>
+                    )}
+
+                    {/* Confidence score */}
+                    {clip.confidence_score !== undefined && (
+                      <div className="mt-1 sm:mt-2 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full max-w-20 sm:max-w-24">
+                          <div
+                            className="h-full bg-green-500 rounded-full"
+                            style={{ width: `${clip.confidence_score * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {Math.round(clip.confidence_score * 100)}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex flex-col gap-2">
+                {/* Actions - horizontal on mobile, vertical on desktop */}
+                <div className="flex sm:flex-col gap-2 pl-15 sm:pl-0">
                   {clip.status === 'pending' && (
                     <>
                       <button
                         onClick={() => handleApprove(clip.id)}
                         disabled={isLoading}
-                        className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors disabled:opacity-50"
+                        className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 active:bg-green-300 rounded-lg transition-colors disabled:opacity-50 touch-manipulation"
                       >
                         {isLoading ? '...' : 'Approve'}
                       </button>
                       <button
                         onClick={() => handleReject(clip.id)}
                         disabled={isLoading}
-                        className="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-lg transition-colors disabled:opacity-50"
+                        className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 active:bg-red-300 rounded-lg transition-colors disabled:opacity-50 touch-manipulation"
                       >
                         {isLoading ? '...' : 'Reject'}
                       </button>
@@ -330,13 +334,13 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
                   )}
 
                   {clip.status === 'approved' && (
-                    <span className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 rounded-lg">
+                    <span className="px-4 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg text-center">
                       Approved
                     </span>
                   )}
 
                   {clip.status === 'rejected' && (
-                    <span className="px-3 py-1.5 text-sm font-medium text-gray-500 bg-gray-100 rounded-lg">
+                    <span className="px-4 py-2 text-sm font-medium text-gray-500 bg-gray-100 rounded-lg text-center">
                       Rejected
                     </span>
                   )}

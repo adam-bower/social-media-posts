@@ -125,16 +125,16 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6">
+    <div className="max-w-xl mx-auto p-3 sm:p-6">
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`
-          border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer
+          border-2 border-dashed rounded-lg p-8 sm:p-12 text-center transition-colors cursor-pointer
           ${isDragging
             ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
+            : 'border-gray-300 hover:border-gray-400 active:border-blue-400 active:bg-blue-50'
           }
           ${isUploading ? 'pointer-events-none opacity-50' : ''}
         `}
@@ -148,9 +148,9 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
           disabled={isUploading}
         />
 
-        <label htmlFor="video-upload" className="cursor-pointer">
+        <label htmlFor="video-upload" className="cursor-pointer block touch-manipulation">
           <svg
-            className="w-12 h-12 mx-auto mb-4 text-gray-400"
+            className="w-16 h-16 sm:w-12 sm:h-12 mx-auto mb-4 text-gray-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -166,9 +166,9 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
           {isUploading ? (
             <div>
               <p className="text-gray-600 mb-2">Uploading...</p>
-              <div className="w-48 mx-auto bg-gray-200 rounded-full h-2">
+              <div className="w-48 mx-auto bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-200"
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-200"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
@@ -176,10 +176,10 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
             </div>
           ) : (
             <>
-              <p className="text-gray-600 mb-2">
-                <span className="text-blue-600 font-medium">Click to upload</span> or drag and drop
+              <p className="text-base sm:text-lg text-gray-600 mb-2">
+                <span className="text-blue-600 font-medium">Tap to upload</span>
               </p>
-              <p className="text-sm text-gray-500">MP4, MOV, WebM, or AVI (max 5GB)</p>
+              <p className="text-sm text-gray-500">MP4, MOV, WebM, or AVI</p>
             </>
           )}
         </label>
@@ -193,24 +193,24 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
 
       {/* Existing processed videos */}
       {existingVideos.length > 0 && onResumeReview && (
-        <div className="mt-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Previously Processed Videos</h3>
-          <div className="space-y-3">
+        <div className="mt-6 sm:mt-8">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4">Previously Processed</h3>
+          <div className="space-y-2 sm:space-y-3">
             {existingVideos.map((video) => (
               <div
                 key={video.id}
-                className="flex items-center justify-between p-4 bg-white border rounded-lg hover:border-blue-300 transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-white border rounded-lg hover:border-blue-300 active:bg-gray-50 transition-colors gap-2 sm:gap-4"
               >
-                <div>
-                  <p className="font-medium text-gray-800">{video.filename}</p>
-                  <p className="text-sm text-gray-500">
-                    {video.duration_seconds ? `${Math.round(video.duration_seconds / 60)}m ${Math.round(video.duration_seconds % 60)}s` : 'Unknown duration'}
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-gray-800 text-sm sm:text-base truncate">{video.filename}</p>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {video.duration_seconds ? `${Math.round(video.duration_seconds / 60)}m ${Math.round(video.duration_seconds % 60)}s` : 'Unknown'}
                     {video.resolution && ` • ${video.resolution}`}
                   </p>
                 </div>
                 <button
                   onClick={() => onResumeReview(video.id)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-lg transition-colors touch-manipulation"
                 >
                   Review Clips
                 </button>
