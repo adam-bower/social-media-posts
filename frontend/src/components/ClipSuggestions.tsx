@@ -221,7 +221,6 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
 
   const pendingClips = clips.filter(c => c.status === 'pending');
   const approvedClips = clips.filter(c => c.status === 'approved');
-  const rejectedClips = clips.filter(c => c.status === 'rejected');
 
   return (
     <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
