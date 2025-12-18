@@ -90,10 +90,13 @@ function App() {
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           {/* Top row: title and actions */}
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg sm:text-xl font-semibold text-white">Video Clipper</h1>
+            <button
+              onClick={handleStartOver}
+              className="text-left touch-manipulation"
+            >
+              <h1 className="text-lg sm:text-xl font-semibold text-white hover:text-zinc-300 transition-colors">Video Clipper</h1>
               <p className="text-xs text-zinc-500 hidden sm:block">AI-powered clip extraction</p>
-            </div>
+            </button>
 
             {state !== 'upload' && (
               <div className="flex items-center gap-2">
@@ -108,9 +111,12 @@ function App() {
                 )}
                 <button
                   onClick={handleStartOver}
-                  className="px-3 py-2 text-sm text-zinc-400 hover:text-white font-medium touch-manipulation"
+                  className="px-3 py-2 text-sm bg-zinc-800 text-zinc-300 hover:bg-zinc-700 active:bg-zinc-600 font-medium rounded-lg touch-manipulation flex items-center gap-1.5"
                 >
-                  New
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  Home
                 </button>
               </div>
             )}
