@@ -227,18 +227,21 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
     <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
       {/* Header */}
       <div className="p-3 sm:p-4 border-b border-zinc-800 bg-zinc-900/50">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           <div>
             <h3 className="font-medium text-white text-sm sm:text-base">Clips</h3>
             <p className="text-xs text-zinc-500">
-              {pendingClips.length} pending · {approvedClips.length} approved · {rejectedClips.length} rejected
+              {pendingClips.length} pending · {approvedClips.length} approved
             </p>
           </div>
         </div>
+        <p className="text-xs text-zinc-400 mb-3">
+          Tap a clip to see timeline & transcript. Use ▶ to preview audio.
+        </p>
 
         {/* Edit preset selector */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="text-xs text-zinc-500 whitespace-nowrap">Style:</span>
+          <span className="text-xs text-zinc-500 whitespace-nowrap">Audio edit:</span>
           <div className="flex gap-1">
             {(Object.keys(PRESET_INFO) as EditPreset[]).map((preset) => (
               <button
@@ -271,11 +274,11 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
           return (
             <div
               key={clip.id}
-              className={`transition-all ${clip.status === 'rejected' ? 'opacity-40' : ''}`}
+              className={`transition-all ${clip.status === 'rejected' ? 'opacity-40' : ''} ${isExpanded ? 'bg-zinc-800/30' : ''}`}
             >
-              {/* Main clip row */}
+              {/* Main clip row - tap to expand */}
               <div
-                className="p-3 sm:p-4 cursor-pointer hover:bg-zinc-800/50 active:bg-zinc-800 transition-colors"
+                className={`p-3 sm:p-4 cursor-pointer transition-colors ${isExpanded ? 'bg-zinc-800/50' : 'hover:bg-zinc-800/50 active:bg-zinc-800'}`}
                 onClick={() => handleClipClick(clip)}
               >
                 <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
@@ -320,14 +323,9 @@ export function ClipSuggestions({ videoId, onClipSelect }: ClipSuggestionsProps)
                           ({formatDuration(duration)})
                         </span>
                         {/* Expand indicator */}
-                        <svg
-                          className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                        <span className={`ml-auto px-2 py-0.5 rounded text-[10px] ${isExpanded ? 'bg-white text-zinc-900' : 'bg-zinc-700 text-zinc-400'}`}>
+                          {isExpanded ? '▲ Less' : '▼ More'}
+                        </span>
                       </div>
 
                       {/* Hook reason */}
