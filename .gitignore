@@ -1,0 +1,53 @@
+# Environment and secrets
+.env
+.env.*
+!.env.template
+*.enc.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+output/
+generated/
+*.log
+
+# Video/Audio data (large files)
+data/uploads/
+data/audio/
+data/processing/
+*.wav
+*.mp3
+*.mp4
+*.mov
+*.webm
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vercel/
+
+# Model cache (large files)
+models/
