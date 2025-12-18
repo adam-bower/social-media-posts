@@ -35,8 +35,8 @@ export function ClipSuggestions({ videoId }: ClipSuggestionsProps) {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [playingClipId, setPlayingClipId] = useState<string | null>(null);
-  const [editPreset, setEditPreset] = useState<EditPreset>('linkedin');
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
+  const [clipPresets, setClipPresets] = useState<Record<string, EditPreset>>({});
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -97,6 +97,21 @@ export function ClipSuggestions({ videoId }: ClipSuggestionsProps) {
     }
   };
 
+  // Get preset for a specific clip (default to 'off' for raw audio)
+  const getClipPreset = (clipId: string): EditPreset => {
+    return clipPresets[clipId] || 'off';
+  };
+
+  const setClipPreset = (clipId: string, preset: EditPreset) => {
+    // Stop any playing audio when changing preset
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlayingClipId(null);
+    setClipPresets(prev => ({ ...prev, [clipId]: preset }));
+  };
+
   const handlePlayClip = (clip: ClipSuggestion, e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -110,12 +125,13 @@ export function ClipSuggestions({ videoId }: ClipSuggestionsProps) {
       return;
     }
 
+    const preset = getClipPreset(clip.id);
     const audioUrl = getClipPreviewUrl(
       videoId,
       clip.start_time,
       clip.end_time,
-      editPreset !== 'off',
-      editPreset === 'off' ? 'linkedin' : editPreset
+      preset !== 'off',
+      preset === 'off' ? 'linkedin' : preset
     );
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
@@ -186,39 +202,11 @@ export function ClipSuggestions({ videoId }: ClipSuggestionsProps) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-white">Suggested Clips</h2>
-          <p className="text-sm text-zinc-500">
-            {pendingClips.length} pending · {approvedClips.length} approved
-          </p>
-        </div>
-
-        {/* Edit preset selector */}
-        <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
-          {(Object.keys(PRESET_INFO) as EditPreset[]).map((preset) => (
-            <button
-              key={preset}
-              onClick={() => {
-                if (audioRef.current) {
-                  audioRef.current.pause();
-                  audioRef.current = null;
-                }
-                setPlayingClipId(null);
-                setEditPreset(preset);
-              }}
-              className={`
-                px-3 py-1.5 text-xs rounded-md transition-all whitespace-nowrap touch-manipulation
-                ${editPreset === preset
-                  ? 'bg-white text-zinc-900 font-medium'
-                  : 'text-zinc-400 hover:text-white'
-                }
-              `}
-            >
-              {PRESET_INFO[preset].label}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h2 className="text-lg font-semibold text-white">Suggested Clips</h2>
+        <p className="text-sm text-zinc-500">
+          {pendingClips.length} pending · {approvedClips.length} approved
+        </p>
       </div>
 
       {/* Clips list */}
@@ -316,27 +304,36 @@ export function ClipSuggestions({ videoId }: ClipSuggestionsProps) {
                     </div>
                   </div>
 
-                  {/* Duration by edit style */}
+                  {/* Edit style selector */}
                   <div className="px-4 pb-4">
-                    <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-3">Estimated Duration</h4>
+                    <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-3">Edit Style</h4>
                     <div className="grid grid-cols-5 gap-2">
                       {(Object.keys(PRESET_INFO) as EditPreset[]).map((preset) => {
                         const info = PRESET_INFO[preset];
                         const estimatedDuration = duration * (1 - info.reduction);
-                        const isActive = editPreset === preset;
+                        const isActive = getClipPreset(clip.id) === preset;
                         return (
-                          <div
+                          <button
                             key={preset}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setClipPreset(clip.id, preset);
+                            }}
                             className={`
-                              text-center p-2 rounded-lg
-                              ${isActive ? 'bg-white/10' : 'bg-zinc-800/50'}
+                              text-center p-2 rounded-lg transition-all touch-manipulation
+                              ${isActive
+                                ? 'bg-white text-zinc-900 ring-2 ring-white'
+                                : 'bg-zinc-800/50 hover:bg-zinc-700/50'
+                              }
                             `}
                           >
-                            <div className="text-[10px] text-zinc-500 mb-1">{info.label}</div>
-                            <div className={`text-sm font-medium ${isActive ? 'text-white' : 'text-zinc-400'}`}>
+                            <div className={`text-[10px] font-medium mb-1 ${isActive ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                              {info.label}
+                            </div>
+                            <div className={`text-sm font-bold ${isActive ? 'text-zinc-900' : 'text-zinc-300'}`}>
                               {formatDuration(estimatedDuration)}
                             </div>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
