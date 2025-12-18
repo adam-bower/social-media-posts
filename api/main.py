@@ -42,7 +42,15 @@ allowed_origins = [
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3010",
     "https://posts.ab-civil.com",
+    "https://video-clipper.ab-civil.com",
+    # Vercel preview/production domains
+    "https://social-media-posts.vercel.app",
+    "https://*.vercel.app",
 ]
+
+# Add any additional origins from environment
+extra_origins = os.getenv("CORS_ORIGINS", "").split(",")
+allowed_origins.extend([o.strip() for o in extra_origins if o.strip()])
 
 app.add_middleware(
     CORSMiddleware,

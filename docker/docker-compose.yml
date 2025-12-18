@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  video-clipper-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: video-clipper-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8010:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+    volumes:
+      - video-data:/app/data
+      - /mnt/misc/video-clipper:/mnt/misc/video-clipper
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  video-data:

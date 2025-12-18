@@ -1,0 +1,140 @@
+Deploy Video Clipper API to Hetzner Server (88.99.51.122)
+
+The video clipper is a FastAPI backend that handles video transcription, AI clip suggestions, and audio processing. The frontend will be hosted on Vercel separately.
+
+## Repository
+GitHub: https://github.com/adam-bower/social-media-posts
+
+## Server Requirements
+- Docker and Docker Compose
+- FFmpeg (installed in container)
+- Port 8010 available (internal, Caddy will proxy)
+
+## Step 1: Create Directory and Clone
+
+```bash
+mkdir -p /opt/video-clipper
+cd /opt/video-clipper
+git clone https://github.com/adam-bower/social-media-posts.git .
+```
+
+## Step 2: Create .env File
+
+Create `/opt/video-clipper/.env` with these values (get from existing Supabase/API configs):
+
+```bash
+# Supabase (same as other services using db.ab-civil.com)
+SUPABASE_URL=https://db.ab-civil.com
+SUPABASE_SERVICE_ROLE_KEY=<get from existing config>
+
+# AI APIs
+ANTHROPIC_API_KEY=<get from existing config>
+DEEPGRAM_API_KEY=<get from existing config>
+OPENROUTER_API_KEY=<get from existing config>
+
+# CORS - allow Vercel frontend
+CORS_ORIGINS=https://social-media-posts.vercel.app,https://video-clipper.vercel.app
+```
+
+## Step 3: Create Data Directory
+
+```bash
+mkdir -p /mnt/misc/video-clipper/uploads
+mkdir -p /mnt/misc/video-clipper/audio
+mkdir -p /mnt/misc/video-clipper/processing
+chown -R 1000:1000 /mnt/misc/video-clipper
+```
+
+## Step 4: Build and Start Docker Container
+
+```bash
+cd /opt/video-clipper
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+## Step 5: Verify Container is Running
+
+```bash
+docker ps | grep video-clipper
+curl http://localhost:8010/health
+```
+
+Expected response: `{"status":"healthy","service":"video-clipper"}`
+
+## Step 6: Add Caddy Configuration
+
+Add to `/etc/caddy/Caddyfile`:
+
+```caddy
+video-clipper.ab-civil.com {
+    reverse_proxy localhost:8010 {
+        header_up X-Forwarded-Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Allow large video uploads (up to 2GB)
+    request_body {
+        max_size 2GB
+    }
+}
+```
+
+Then reload Caddy:
+```bash
+sudo systemctl reload caddy
+```
+
+## Step 7: Test the API
+
+```bash
+curl https://video-clipper.ab-civil.com/health
+curl https://video-clipper.ab-civil.com/api/health
+```
+
+## DNS Record Needed
+
+Add A record for `video-clipper.ab-civil.com` pointing to `88.99.51.122` (if not already configured as wildcard).
+
+## API Endpoints Available
+
+- GET /health - Health check
+- GET /api/health - API health check
+- POST /api/upload - Upload video file
+- GET /api/videos - List all videos
+- GET /api/videos/{id} - Get video details
+- POST /api/videos/{id}/process - Start transcription pipeline
+- GET /api/videos/{id}/transcript - Get transcript
+- GET /api/videos/{id}/suggestions - Get clip suggestions
+- POST /api/videos/{id}/compose-clips - AI-powered clip composition
+- GET /api/videos/{id}/audio - Stream audio file
+- GET /api/videos/{id}/clip-preview - Preview clip audio segment
+- PATCH /api/clips/{id} - Update clip status
+- POST /api/clips/{id}/approve - Approve clip
+- POST /api/clips/{id}/reject - Reject clip
+
+## Updating the Service
+
+To pull updates and restart:
+
+```bash
+cd /opt/video-clipper
+git pull
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+## Viewing Logs
+
+```bash
+docker logs -f video-clipper-api
+```
+
+## Frontend URL (After Vercel Deploy)
+
+The frontend will be at: https://social-media-posts.vercel.app
+It needs the environment variable: VITE_API_URL=https://video-clipper.ab-civil.com/api
+
+---
+
+Once this is deployed and running, let me know the URL and I'll set up the Vercel frontend to connect to it.
