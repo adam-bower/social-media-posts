@@ -1,0 +1,119 @@
+PERPLEXITY RESEARCH PROMPT: Mobile-First Video Clip Review Interface Optimization
+
+---
+
+CONTEXT: I'm building a mobile-first web app for reviewing AI-generated video clips. The primary use case is reviewing clips on a phone while away from my desk. The app is built with React + Tailwind CSS + Vite, deployed on Vercel.
+
+CURRENT IMPLEMENTATION:
+- Sticky header with action buttons
+- Clip cards with play button, metadata, approve/reject buttons
+- Horizontal scrolling preset selector (5 options: YT Shorts, TikTok, LinkedIn, Podcast, Off)
+- Audio playback via HTML5 Audio element
+- Touch targets set to 44-48px minimum
+- Using `touch-manipulation` CSS for faster tap response
+- Safe area padding for iPhone notch
+- Clips show first on mobile (above transcript)
+
+SPECIFIC FEATURES TO RESEARCH:
+
+1. AUDIO PLAYBACK ON MOBILE
+Current: Using `new Audio(url)` and `audio.play()` for clip previews
+Questions:
+- What are the iOS Safari restrictions on audio autoplay in 2024-2025?
+- Do I need user gesture requirements for each audio play?
+- Should I use a single persistent audio element vs creating new ones per clip?
+- What's the best practice for audio state management in React on mobile?
+- Are there issues with audio playback when the phone is locked or app is backgrounded?
+
+2. TOUCH TARGET SIZING
+Current: 44px minimum per Apple HIG, but using 48px for primary actions
+Questions:
+- What does recent UX research say about optimal touch target sizes for 2024?
+- Is 44px still the gold standard or have recommendations changed?
+- What spacing should exist between adjacent touch targets?
+- Any differences between iOS and Android recommendations?
+
+3. HORIZONTAL SCROLLING UI PATTERNS
+Current: Edit presets (5 buttons) in a horizontal scroll container
+Questions:
+- What are best practices for horizontal scroll indicators on mobile?
+- Should I add visual affordances (gradient fade, arrows, dots)?
+- Are there accessibility concerns with horizontal scrolling?
+- What's the best way to handle horizontal scroll with swipe gestures?
+
+4. APPROVE/REJECT SWIPE GESTURES
+Not implemented yet, but considering:
+Questions:
+- What libraries work best for swipe-to-action in React (react-swipeable, @use-gesture/react, framer-motion)?
+- What are the UX patterns for swipe-to-approve/reject (like Tinder, email apps)?
+- Should swipe reveal buttons or immediately take action?
+- What haptic feedback patterns are recommended for swipe actions?
+- Any accessibility concerns with swipe-only interfaces?
+
+5. PULL-TO-REFRESH vs MANUAL REFRESH
+Current: Using `overscroll-behavior-y: contain` to prevent pull-to-refresh
+Questions:
+- When is pull-to-refresh appropriate vs a refresh button?
+- What are the best React libraries for custom pull-to-refresh?
+- How to handle loading states during refresh on mobile?
+
+6. MOBILE VIDEO/AUDIO SCRUBBING
+Future feature: Timeline scrubber for clip boundaries
+Questions:
+- What are best practices for audio/video scrubbing on mobile?
+- How to make a scrubber touch-friendly (fat thumb problem)?
+- Should I use native range input or custom implementation?
+- Any libraries recommended for waveform visualization on mobile (WaveSurfer.js mobile performance)?
+
+7. OFFLINE SUPPORT / PWA
+Current: Basic PWA meta tags added
+Questions:
+- Is it worth implementing service workers for offline clip review?
+- How to handle audio caching in a PWA?
+- What's the state of PWA support on iOS Safari in 2024-2025?
+- Any gotchas with Vercel and PWA deployments?
+
+8. PERFORMANCE OPTIMIZATION
+Current: Standard React rendering
+Questions:
+- What are the main performance bottlenecks for audio-heavy mobile web apps?
+- Should I virtualize a list of 10-20 clips or is that overkill?
+- Best practices for preventing janky scrolling with dynamic content?
+- How to optimize for low-end Android devices?
+
+9. HAPTIC FEEDBACK
+Not implemented
+Questions:
+- How to implement haptic feedback in web apps (Vibration API)?
+- What actions should trigger haptics (button taps, swipe completion)?
+- iOS vs Android differences in web haptic support?
+- Any UX guidelines on when haptics enhance vs annoy users?
+
+10. GESTURE CONFLICTS
+Concern: Swipe gestures might conflict with browser navigation
+Questions:
+- How to prevent horizontal swipe from triggering browser back/forward?
+- Best practices for distinguishing app gestures from system gestures?
+- Edge swipe safe zones on iOS and Android?
+
+SPECIFIC TECHNOLOGIES TO RESEARCH:
+- react-swipeable vs @use-gesture/react vs framer-motion for gestures
+- Howler.js vs native Audio API for mobile audio
+- WaveSurfer.js performance on mobile devices
+- Workbox for PWA service workers with Vite
+
+REAL-WORLD EXAMPLES TO REFERENCE:
+- Spotify mobile web player (audio handling)
+- Tinder (swipe gestures)
+- Gmail mobile (swipe-to-archive)
+- Instagram (stories tap/swipe navigation)
+- TikTok web (vertical scroll video)
+
+OUTPUT REQUESTED:
+1. For each topic, provide current best practices with citations to recent (2024-2025) sources
+2. Identify any gotchas or common mistakes developers make
+3. Recommend specific libraries or approaches with pros/cons
+4. Note any iOS Safari-specific issues (this is the primary target device)
+5. Prioritize recommendations by impact (what will make the biggest difference in user experience)
+
+The app will be used by one person (me) on an iPhone, primarily for quickly reviewing and approving/rejecting AI-suggested video clips while away from my computer. Speed and ease of one-handed use are the top priorities.

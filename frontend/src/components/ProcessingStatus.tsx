@@ -30,7 +30,7 @@ export function ProcessingStatus({ videoId, onComplete, onError }: ProcessingSta
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+    let intervalId: ReturnType<typeof setInterval>;
 
     const checkStatus = async () => {
       try {
