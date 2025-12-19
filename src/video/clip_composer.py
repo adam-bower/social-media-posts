@@ -253,6 +253,69 @@ def compose_clips(
     return valid_clips
 
 
+def compose_clips_with_duration_estimates(
+    audio_path: str,
+    segments: List[Dict],
+    duration: float,
+    platform: str = "linkedin",
+    context: Optional[str] = None,
+    num_clips: int = 3,
+) -> List[Dict[str, Any]]:
+    """
+    Compose clips with accurate post-silence-removal duration estimates.
+
+    This enhanced version estimates the actual duration after silence removal
+    for each segment in a composed clip.
+
+    Args:
+        audio_path: Path to audio file (for VAD analysis)
+        segments: Transcript segments with word-level timestamps
+        duration: Total video duration
+        platform: Target platform
+        context: Optional context
+        num_clips: Number of clips to generate
+
+    Returns:
+        List of composed clips with estimated_duration after silence removal
+    """
+    from src.video.waveform_silence_remover import estimate_edited_duration
+
+    # Get base composed clips
+    clips = compose_clips(segments, duration, platform, context, num_clips)
+
+    # Enhance with accurate duration estimates
+    for clip in clips:
+        if not clip.get("segments"):
+            continue
+
+        # Map platform to preset
+        preset_map = {
+            "tiktok": "tiktok",
+            "linkedin": "linkedin",
+            "youtube_shorts": "youtube_shorts",
+        }
+        preset = preset_map.get(platform, "linkedin")
+
+        # Calculate estimated duration for each segment
+        total_estimated = 0.0
+        for seg in clip["segments"]:
+            start = seg["start_time"]
+            end = seg["end_time"]
+            estimate = estimate_edited_duration(audio_path, start, end, preset)
+            seg["estimated_duration"] = estimate["estimated_duration"]
+            total_estimated += estimate["estimated_duration"]
+
+        clip["raw_duration"] = clip["estimated_duration"]  # This was the sum of raw segments
+        clip["estimated_duration"] = round(total_estimated, 2)
+        clip["percent_reduction"] = round(
+            (clip["raw_duration"] - total_estimated) / clip["raw_duration"] * 100
+            if clip["raw_duration"] > 0 else 0,
+            1
+        )
+
+    return clips
+
+
 def compose_clips_for_all_platforms(
     segments: List[Dict],
     duration: float,

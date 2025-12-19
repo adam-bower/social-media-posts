@@ -82,13 +82,13 @@ PRESETS: Dict[EditPreset, EditConfig] = {
         max_word_gap=0.35,
     ),
     EditPreset.LINKEDIN: EditConfig(
-        max_pause_duration=0.4,
-        min_pause_to_trim=0.2,
-        pause_replacement=0.15,
-        sentence_end_pause=0.4,
+        max_pause_duration=0.7,      # More natural pacing - was 0.4
+        min_pause_to_trim=0.5,       # Only trim pauses > 0.5s - was 0.2
+        pause_replacement=0.35,      # Keep reasonable pause - was 0.15
+        sentence_end_pause=0.6,      # Natural breath at sentence end - was 0.4
         remove_fillers=True,
         detect_restarts=True,
-        max_word_gap=0.5,
+        max_word_gap=0.6,            # Allow natural word spacing - was 0.5
     ),
     EditPreset.PODCAST: EditConfig(
         max_pause_duration=0.6,
@@ -247,12 +247,27 @@ class SmartEditor:
         """
         restarts = []
 
-        # Look for patterns like:
+        # First, detect sentence-level repeats (e.g., "It's so simple. It's so simple.")
+        sentence_restarts = self._detect_sentence_repeats(words)
+        restarts.extend(sentence_restarts)
+
+        # Create set of already-cut indices to avoid double-cutting
+        cut_indices = set()
+        for cut_start, cut_end in restarts:
+            for i in range(cut_start, cut_end + 1):
+                cut_indices.add(i)
+
+        # Then look for word-level patterns like:
         # "The construction... the construction industry" -> cut first "the construction"
         # "We need to... we need to focus" -> cut first "we need to"
 
         i = 0
         while i < len(words) - self.config.min_restart_words:
+            # Skip if this word is already being cut
+            if i in cut_indices:
+                i += 1
+                continue
+
             # Get a window of upcoming words
             window_end = i
             for j in range(i, len(words)):
@@ -265,10 +280,79 @@ class SmartEditor:
 
             if restart_found:
                 cut_start, cut_end = restart_found
-                restarts.append((cut_start, cut_end))
-                # Skip past the cut section
-                i = cut_end + 1
+                # Check we're not overlapping with sentence restarts
+                overlap = any(idx in cut_indices for idx in range(cut_start, cut_end + 1))
+                if not overlap:
+                    restarts.append((cut_start, cut_end))
+                    # Skip past the cut section
+                    i = cut_end + 1
+                else:
+                    i += 1
             else:
+                i += 1
+
+        return restarts
+
+    def _detect_sentence_repeats(self, words: List[WordInfo]) -> List[Tuple[int, int]]:
+        """
+        Detect when a phrase is repeated regardless of sentence boundaries.
+
+        CONSERVATIVE approach: Only cut the EXACT repeated phrase, not content in between.
+        This prevents cutting meaningful content that happens to be near a restart.
+
+        Examples:
+        - "It's so simple. It's so simple but..." -> cut just first "It's so simple"
+        - "survey quality is... if it's a GIS aerial... If it's a GIS aerial survey"
+          -> cut "if it's a GIS aerial" (first occurrence only)
+
+        Returns list of (start_idx, end_idx) of words to CUT.
+        """
+        restarts = []
+        already_cut = set()  # Avoid overlapping cuts
+
+        # Look for repeated phrases of length 3-6 words (not too long)
+        for phrase_len in range(3, 7):
+            i = 0
+            while i < len(words) - phrase_len:
+                if i in already_cut:
+                    i += 1
+                    continue
+
+                # Get phrase starting at i
+                phrase = [words[i + k].clean_word for k in range(phrase_len)]
+
+                # Skip phrases that start with very common words unless longer
+                skip_starts = ['i', 'you', 'and', 'the', 'a', 'um', 'uh', 'so', 'but', 'or']
+                if phrase[0] in skip_starts and phrase_len < 4:
+                    i += 1
+                    continue
+
+                # Look for this phrase later (within 10 second window - tighter)
+                for j in range(i + phrase_len, len(words) - phrase_len + 1):
+                    # Time window check - only look within 10 seconds
+                    time_gap = words[j].start - words[i + phrase_len - 1].end
+                    if time_gap > 10.0:
+                        break
+
+                    # Check if phrase matches
+                    match = True
+                    for k in range(phrase_len):
+                        if words[j + k].clean_word != phrase[k]:
+                            match = False
+                            break
+
+                    if match:
+                        # Found a repeat!
+                        # CONSERVATIVE: Only cut the first occurrence of the phrase itself
+                        # Don't cut anything else, even if there's content between them
+                        phrase_end = i + phrase_len - 1
+
+                        # Mark just this phrase as cut
+                        for k in range(i, phrase_end + 1):
+                            already_cut.add(k)
+                        restarts.append((i, phrase_end))
+                        break
+
                 i += 1
 
         return restarts

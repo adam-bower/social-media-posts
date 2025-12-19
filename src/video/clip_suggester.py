@@ -241,6 +241,85 @@ def suggest_clips(
     return valid_suggestions
 
 
+def suggest_clips_with_duration_estimates(
+    audio_path: str,
+    segments: List[Dict],
+    silences: List[Dict],
+    duration: float,
+    context: Optional[str] = None,
+    preset: str = "linkedin",
+) -> List[Dict[str, Any]]:
+    """
+    Suggest clips with accurate post-silence-removal duration estimates.
+
+    This enhanced version:
+    1. Gets clip suggestions from Claude Haiku
+    2. For each suggestion, calculates the actual duration after silence removal
+    3. Filters out clips that would be too short/long for their target platform
+
+    Args:
+        audio_path: Path to audio file (for VAD analysis)
+        segments: List of transcript segments with timestamps
+        silences: List of silence periods (from transcript)
+        duration: Total video duration in seconds
+        context: Optional context about the video content
+        preset: Default preset for duration estimation
+
+    Returns:
+        List of clip suggestions with estimated_duration fields
+    """
+    from src.video.waveform_silence_remover import estimate_edited_duration
+
+    # Get transcript text
+    transcript_text = " ".join(seg.get("text", "") for seg in segments)
+
+    # Get base suggestions
+    suggestions = suggest_clips(transcript_text, segments, silences, duration, context)
+
+    # Enhance with duration estimates
+    enhanced = []
+    for suggestion in suggestions:
+        start = suggestion["start_time"]
+        end = suggestion["end_time"]
+        platform = suggestion["platform"]
+
+        # Determine preset based on platform
+        if platform == "tiktok":
+            est_preset = "tiktok"
+        elif platform == "linkedin":
+            est_preset = "linkedin"
+        else:
+            est_preset = preset  # Use default for "both"
+
+        # Get duration estimate
+        estimate = estimate_edited_duration(audio_path, start, end, est_preset)
+
+        suggestion["raw_duration"] = suggestion["duration"]
+        suggestion["estimated_duration"] = estimate["estimated_duration"]
+        suggestion["time_saved"] = estimate["time_saved"]
+        suggestion["percent_reduction"] = estimate["percent_reduction"]
+
+        # Platform-specific duration validation
+        is_valid = True
+        if platform == "tiktok":
+            # TikTok: 15-180 seconds (relaxed from 60s since TikTok now supports longer)
+            if estimate["estimated_duration"] < 15:
+                is_valid = False
+                suggestion["rejection_reason"] = "too short for TikTok"
+        elif platform == "linkedin":
+            # LinkedIn: 30-120 seconds
+            if estimate["estimated_duration"] < 30:
+                is_valid = False
+                suggestion["rejection_reason"] = "too short for LinkedIn"
+            elif estimate["estimated_duration"] > 120:
+                suggestion["warning"] = "may be too long for LinkedIn engagement"
+
+        if is_valid:
+            enhanced.append(suggestion)
+
+    return enhanced
+
+
 def main(
     transcript_text: str,
     segments: List[Dict],

@@ -12,7 +12,7 @@ Usage:
 import os
 import subprocess
 import tempfile
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 
 def assemble_audio(
@@ -171,6 +171,76 @@ def create_edited_clip(
         "edit_details": analysis["edit_details"],
         "segments_kept": len(segments_to_keep),
     }
+
+
+def create_edited_clip_waveform(
+    audio_path: str,
+    clip_start: float,
+    clip_end: float,
+    preset: str = "linkedin",
+    output_path: Optional[str] = None,
+    transcript: Optional[Dict] = None,
+    remove_fillers: bool = True,
+) -> Dict:
+    """
+    Create an edited clip using waveform-based (Silero VAD) silence removal.
+
+    This is the new approach that prevents word clipping by detecting silence
+    from the audio waveform rather than relying on transcript timestamps.
+
+    Args:
+        audio_path: Source audio file
+        clip_start: Clip start time
+        clip_end: Clip end time
+        preset: Editing preset (youtube_shorts, tiktok, linkedin, podcast)
+        output_path: Output file path
+        transcript: Optional transcript for filler/restart detection
+        remove_fillers: Whether to remove fillers (requires transcript)
+
+    Returns:
+        Dict with output_path, time_savings, and edit_details
+    """
+    from src.video.waveform_silence_remover import process_clip_waveform_only
+
+    # Generate output path if not provided
+    if not output_path:
+        base = os.path.splitext(audio_path)[0]
+        output_path = f"{base}_clip_{clip_start:.1f}_{clip_end:.1f}_{preset}_vad.wav"
+
+    # Process with Silero VAD
+    result = process_clip_waveform_only(
+        audio_path=audio_path,
+        output_path=output_path,
+        preset=preset,
+        clip_start=clip_start,
+        clip_end=clip_end,
+    )
+
+    # Optionally analyze transcript for fillers (reporting only - VAD handles removal)
+    filler_info = None
+    if transcript and remove_fillers:
+        try:
+            from src.video.transcript_enhanced_editor import analyze_transcript_for_editing
+            filler_info = analyze_transcript_for_editing(transcript)
+        except ImportError:
+            pass  # Transcript enhancement not available
+
+    output = {
+        "output_path": output_path,
+        "original_duration": result["original_duration"],
+        "edited_duration": result["edited_duration"],
+        "time_savings": result["time_saved"],
+        "percent_reduction": result["percent_reduction"],
+        "silences_detected": result["silences_detected"],
+        "speech_segments": result["speech_segments"],
+        "preset": preset,
+        "method": "silero_vad",
+    }
+
+    if filler_info:
+        output["transcript_analysis"] = filler_info["summary"]
+
+    return output
 
 
 if __name__ == "__main__":
