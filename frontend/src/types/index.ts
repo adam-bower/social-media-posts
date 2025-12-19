@@ -10,7 +10,11 @@ export type VideoStatus =
 
 export type ClipStatus = 'pending' | 'approved' | 'rejected' | 'rendered';
 
-export type Platform = 'linkedin' | 'tiktok' | 'both';
+export type Platform = 'linkedin' | 'tiktok' | 'youtube_shorts' | 'instagram_reels' | 'both';
+
+export type ExportStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export type SilencePreset = 'linkedin' | 'tiktok' | 'youtube_shorts' | 'podcast';
 
 export interface Video {
   id: string;
@@ -79,4 +83,41 @@ export interface ProcessingResponse {
   id: string;
   status: string;
   message: string;
+}
+
+export interface Export {
+  id: string;
+  clip_id: string;
+  video_id: string;
+  platform: Platform;
+  preset: SilencePreset;
+  status: ExportStatus;
+  progress: number;
+  include_captions: boolean;
+  output_path?: string;
+  output_url?: string;
+  original_duration?: number;
+  edited_duration?: number;
+  time_saved?: number;
+  file_size_bytes?: number;
+  error_message?: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface ExportRequest {
+  platforms: Platform[];
+  preset: SilencePreset;
+  include_captions: boolean;
+}
+
+export interface ExportCreateResponse {
+  message: string;
+  exports: Export[];
+}
+
+export interface ExportListResponse {
+  exports: Export[];
+  total: number;
 }

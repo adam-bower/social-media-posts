@@ -7,6 +7,11 @@ import type {
   UploadResponse,
   ProcessingResponse,
   ClipStatus,
+  Export,
+  ExportCreateResponse,
+  ExportListResponse,
+  Platform,
+  SilencePreset,
 } from '../types';
 
 // Use environment variable for API URL, fallback to relative path for local dev
@@ -167,6 +172,59 @@ export function getClipPreviewUrl(
   return `${API_BASE}/videos/${videoId}/clip-preview?${params}`;
 }
 
+// Exports
+export async function createExport(
+  clipId: string,
+  platforms: Platform[],
+  preset: SilencePreset = 'linkedin',
+  includeCaptions: boolean = true
+): Promise<ExportCreateResponse> {
+  const response = await fetch(`${API_BASE}/clips/${clipId}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platforms,
+      preset,
+      include_captions: includeCaptions,
+    }),
+  });
+  return handleResponse<ExportCreateResponse>(response);
+}
+
+export async function getExports(params?: {
+  video_id?: string;
+  clip_id?: string;
+  status?: string;
+  limit?: number;
+}): Promise<ExportListResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.video_id) searchParams.set('video_id', params.video_id);
+  if (params?.clip_id) searchParams.set('clip_id', params.clip_id);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+
+  const url = `${API_BASE}/exports${searchParams.toString() ? `?${searchParams}` : ''}`;
+  const response = await fetch(url);
+  return handleResponse<ExportListResponse>(response);
+}
+
+export async function getExport(exportId: string): Promise<Export> {
+  const response = await fetch(`${API_BASE}/exports/${exportId}`);
+  return handleResponse<Export>(response);
+}
+
+export async function getVideoExports(videoId: string): Promise<ExportListResponse> {
+  const response = await fetch(`${API_BASE}/videos/${videoId}/exports`);
+  return handleResponse<ExportListResponse>(response);
+}
+
+export async function cancelExport(exportId: string): Promise<{ message: string; id: string }> {
+  const response = await fetch(`${API_BASE}/exports/${exportId}`, {
+    method: 'DELETE',
+  });
+  return handleResponse(response);
+}
+
 // Export all functions
 export const api = {
   uploadVideo,
@@ -184,6 +242,11 @@ export const api = {
   approveClip,
   rejectClip,
   composeClips,
+  createExport,
+  getExports,
+  getExport,
+  getVideoExports,
+  cancelExport,
 };
 
 export default api;
