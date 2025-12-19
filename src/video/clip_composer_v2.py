@@ -254,6 +254,29 @@ Analyze the transcript and identify clip-worthy segments. Look for:
 6. Better to have 2 great clips than 5 mediocre ones
 7. If nothing clip-worthy exists, return empty array - don't force it
 
+## FALSE START DETECTION - CRITICAL
+
+Watch for these patterns and SKIP the first instance, START from the retry:
+
+1. **Repeated phrases with gaps** - Speaker says something, pauses 2-5 seconds, then says the SAME thing again
+   - Example: "if we can't get jobs out on time... [pause] ...if we can't get jobs out on time"
+   - START the clip from the SECOND instance (the confident delivery)
+
+2. **Self-corrections** - "I mean", "what I'm trying to say is", "let me rephrase"
+   - Skip to the corrected version
+
+3. **Abandoned sentences** - Speaker starts a thought, trails off, starts fresh
+   - Look for incomplete sentences followed by a new start
+
+4. **Filler-heavy openings** - "So, um, uh, like, you know..."
+   - Skip past the filler to where the real content begins
+
+5. **Warm-up statements** - "Okay so", "Alright so", "So basically"
+   - These are fine mid-clip but weak as openers - find a stronger start
+
+When you see these patterns, adjust your start_time to AFTER the false start.
+The goal is clips that sound confident and polished from the first word.
+
 ## SEGMENT COMBINATION GUIDELINES
 
 When combining non-adjacent segments:
