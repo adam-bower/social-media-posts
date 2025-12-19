@@ -9,13 +9,8 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8010:8000"
-    environment:
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS:-}
+    env_file:
+      - ../.env
     volumes:
       - video-data:/app/data
       - /mnt/misc/video-clipper:/mnt/misc/video-clipper

@@ -208,8 +208,8 @@ class SileroVADDetector:
         import torch
         import torchaudio
 
-        # Load audio
-        wav, sr = torchaudio.load(audio_path)
+        # Load audio using soundfile backend (avoids torchcodec requirement in newer torchaudio)
+        wav, sr = torchaudio.load(audio_path, backend="soundfile")
 
         # Convert to mono if stereo
         if wav.shape[0] > 1:
