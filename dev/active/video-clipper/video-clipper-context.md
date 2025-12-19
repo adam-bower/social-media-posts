@@ -1,40 +1,63 @@
-# Video Clipper - Context & Reference
+# Content Generation Platform - Context & Reference
 
-**Last Updated**: 2025-12-18 (Session 3)
+**Last Updated**: 2025-12-19 (Session 4 - Unified Pipeline Complete)
 
-> **Full architecture**: See `master-plan.md` for complete details.
+## Key Files
 
-## Key Reference Files
-
-### Patterns to Follow
-| Pattern | File |
+### Video Processing Pipeline (NEW - Session 4)
+| Purpose | File |
 |---------|------|
-| Whisper transcription | `/Users/adambower/dev/windmill/automations/ringcentral_pipeline/stage3_transcribe.py` |
-| Supabase client | `/Users/adambower/dev/windmill/f/slack/daily_summary.py` |
-| Dual-mode (local/Windmill) | `/Users/adambower/dev/windmill/f/slack/pdf_to_project_setup.py` |
-| Server infrastructure | `/Users/adambower/dev/robot-server/CLAUDE.md` |
+| **Unified Exporter** | `src/video/clip_exporter.py` - Main entry point |
+| Silence Removal | `src/video/waveform_silence_remover.py` - Silero VAD |
+| Subject Detection | `src/video/vision_detector.py` - Gemini Flash 2.5 |
+| Crop Calculator | `src/video/crop_calculator.py` - Smart cropping |
+| Caption Generator | `src/video/caption_generator.py` - ASS with karaoke |
+| Video Renderer | `src/video/video_renderer.py` - FFmpeg pipeline |
+| Edit Sync | `src/video/edit_sync.py` - Audio-to-video mapping |
+| Export Formats | `src/video/export_formats.py` - Platform specs |
+| Frame Sampler | `src/video/frame_sampler.py` - FFmpeg frame extraction |
+| Caption Styles | `src/video/caption_styles.py` - Platform styling |
 
-### This Project - Key Files Created
+### Original Pipeline (Still Used)
 | Purpose | File |
 |---------|------|
 | Transcriber (Deepgram) | `src/video/transcriber.py` |
 | Audio extractor | `src/video/audio_extractor.py` |
-| Silence detector | `src/video/silence_detector.py` |
-| Clip suggester (basic) | `src/video/clip_suggester.py` |
-| **Clip Composer V2** | `src/video/clip_composer_v2.py` (AB Civil context + LinkedIn post examples) |
-| **Waveform Analyzer** | `src/video/waveform_analyzer.py` (snaps boundaries to natural pauses) |
-| Audio assembler | `src/video/audio_assembler.py` (smart editing with filler removal) |
+| Clip Composer V2 | `src/video/clip_composer_v2.py` |
+| Waveform Analyzer | `src/video/waveform_analyzer.py` |
+| Audio assembler | `src/video/audio_assembler.py` |
+
+### API & Frontend
+| Purpose | File |
+|---------|------|
 | FastAPI app | `api/main.py` |
 | Database client | `api/database.py` |
 | API routes | `api/routes/upload.py`, `videos.py`, `transcripts.py`, `clips.py` |
 | React frontend | `frontend/src/` |
 | DB schema | `scripts/create_tables.sql` |
-| **LinkedIn import** | `scripts/import_linkedin_posts.py` |
 
-### Config Files
-- `/Users/adambower/dev/social-media-posts/CLAUDE.md` - Project docs
-- `/Users/adambower/dev/social-media-posts/.env` - API keys (already configured)
-- `/Users/adambower/dev/social-media-posts/requirements.txt` - Dependencies
+## Usage - Unified Export Pipeline
+
+```python
+from src.video.clip_exporter import export_clip
+
+result = export_clip(
+    video_path="data/video/C0044.MP4",
+    clip_start=90.0,
+    clip_end=123.0,
+    output_path="output/clip.mp4",
+    format_type="tiktok",       # tiktok, youtube_shorts, linkedin, etc.
+    preset="linkedin",           # Silence removal: linkedin, tiktok, podcast
+    transcript=transcript_dict,  # Optional, for captions
+)
+
+# Result contains:
+# - success: bool
+# - edited_duration: float
+# - time_saved: float
+# - subject_position: detected position
+# - crop: calculated crop region
+```
 
 ## Server Specs (Hetzner DE)
 - **CPU**: Intel i5-13500 (14 cores, 20 threads)
@@ -50,92 +73,63 @@ python3 -m uvicorn api.main:app --reload
 # Start frontend (port 3000)
 cd frontend && npm run dev
 
-# Frontend proxies /api to localhost:8000
-```
-
-## Dual-Mode Pattern
-```python
-def get_api_key(key_name: str) -> str:
-    """Works both locally and in Windmill."""
-    key = os.getenv(key_name)
-    if key:
-        return key
-    try:
-        import wmill
-        return wmill.get_variable(f"f/ai/{key_name.lower()}")
-    except:
-        raise ValueError(f"{key_name} not found")
+# Test unified exporter
+python3 -c "from src.video.clip_exporter import export_clip; print('OK')"
 ```
 
 ---
 
-## Session 2025-12-17 Notes
+## Session 2025-12-19 Notes (Session 4)
 
 ### Progress Made
-- **MVP COMPLETE**: All 5 phases implemented and tested
-- Built full pipeline: upload → transcribe → silence detect → AI clip suggestions → review UI
-- Successfully processed a 6-minute test video end-to-end
-- Installed FFmpeg via Homebrew (was missing initially)
-- Created all Supabase tables
+- **Unified clip export pipeline COMPLETE** - `clip_exporter.py`
+- **All video processing modules created and tested**:
+  - Silero VAD silence removal
+  - Gemini Flash 2.5 subject detection via OpenRouter
+  - Smart crop calculation
+  - Karaoke-style ASS captions
+  - FFmpeg rendering with audio/video sync
+- **Bug fix**: Disabled frame snapping to fix 118ms audio/video desync
+- **Pushed to GitHub**: Commit `e1e0716`
+- **Verified output**: 1080x1920 TikTok video with burned-in captions
 
-### Key Implementation Details
-- Using `base` Whisper model for testing (faster), `large-v3` for production
-- Clip suggestions via OpenRouter → Claude Haiku
-- React + Tailwind v4 + Vite for frontend
-- Background task processing in FastAPI (not Celery yet)
+### Test Results
+| Preset | Original | Edited | Saved |
+|--------|----------|--------|-------|
+| LinkedIn | 33.0s | 30.65s | 7.1% |
+| TikTok | 33.0s | 28.8s | 12.8% |
 
-### Discoveries
-- LinkedIn posts database is in Postiz (https://social.ab-civil.com), not Supabase
-- Postiz has its own PostgreSQL: `docker exec -it postiz-postgres psql -U postgres`
+### Architecture Decision
+- **Platform selection is PER CLIP** - user picks which platforms each clip targets
+- **Text posts are STANDALONE** - can use transcript but not tied to video clips
+- **Frontend to be restructured** with new routes: /upload, /clips, /exports, /text, /library
 
-### What's Working
-- Video upload with drag-drop
-- Audio extraction via FFmpeg
-- Transcription with faster-whisper (word-level timestamps)
-- Silence detection
-- AI clip suggestions (LinkedIn/TikTok platforms)
-- Transcript view with clickable segments
-- Clip approve/reject buttons
-
-### Deferred
-- WebSocket real-time updates
-- Audio preview component (needs audio endpoint)
-- Video rendering (Phase 2)
+### What's NOT Done Yet
+- Server deployment (code pushed but not deployed)
+- Frontend restructure for new architecture
+- Text post generation UI
+- Export queue with background processing
 
 ---
 
-## Session 2025-12-18 Notes
+## Previous Sessions
 
-### Progress Made
-- **LinkedIn posts imported to Supabase**: 178 posts from `/Users/adambower/dev/windmill-server/data/linkedin_posts_cleaned.json`
-- **Created `clip_composer_v2.py`**: Major upgrade with AB Civil context and LinkedIn post examples
-- **Created `waveform_analyzer.py`**: Analyzes audio amplitude to find natural pauses (326 pause points detected)
-- **Refined clip extraction prompt**: Added rules for controversial hooks, problem→solution arcs, segment combination
-- **API working end-to-end**: `/videos/{id}/compose-clips` generates quality clips with waveform snapping
+### Session 2025-12-18 (Session 3)
+- LinkedIn posts imported (178 posts)
+- clip_composer_v2.py with AB Civil context
+- waveform_analyzer.py for boundary snapping
 
-### Key Implementation Details
-- **Transcription**: Deepgram-only (no fallbacks per user request). Deepgram best for filler word detection.
-- **Clip Composer V2** fetches top 10 high-performing LinkedIn posts (50+ likes) as examples for Sonnet
-- **System prompt includes**: AB Civil context (what they do, tone/voice, topics that resonate)
-- **Waveform analysis**: RMS envelope with -25dB threshold for natural pauses, snaps clip boundaries to silence
+### Session 2025-12-17 (Session 2)
+- MVP complete: upload → transcribe → silence detect → AI suggestions → review UI
+- Deepgram transcription working
+- React + Tailwind UI
 
-### Clip Quality Examples Generated
-- "The Worst Survey Type That's Killing Projects" (24.6s, 90% confidence)
-- "How Engineers Create Massive Change Orders" (34.9s, 85% confidence)
-- "The #1 Way to Prevent Earthwork Disasters" (23.6s, 80% confidence)
-
-### Database Tables Added
-- `linkedin_posts` - 178 posts with content, likes, comments, estimated_date
-- `clip_suggestions` columns: `is_composed`, `composition_segments` (for multi-segment clips)
-
-### Deferred
-- Video rendering (actual clip export with FFmpeg)
-- WaveSurfer.js waveform visualization in UI
-- Docker deployment
+---
 
 ## Next Steps When Resuming
-1. **Test with fresh video upload** - Full end-to-end flow via UI with new V2 composer
-2. **Review and adjust prompts** - Fine-tune system prompt based on clip quality
-3. **Add video rendering** - Export actual video clips (not just audio) with FFmpeg
-4. **UI improvements** - WaveSurfer.js waveform, clip boundary adjustment
-5. **Docker deployment** - Package for Hetzner server
+
+1. **Deploy to server** - rsync code, install deps (PyTorch CPU, FFmpeg)
+2. **Restructure frontend** - New routes matching the architecture
+3. **Add platform selector to clip UI** - Checkboxes for TikTok, LinkedIn, etc.
+4. **Create export queue** - Background processing with Celery
+5. **Add text generation** - LinkedIn posts from transcript

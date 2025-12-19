@@ -136,12 +136,46 @@ class RenderedClipResponse(BaseModel):
     created_at: datetime
 
 
+# Clip adjustment schemas
+class SilenceOverride(BaseModel):
+    """Override for a specific silence segment's trim amount."""
+    start: float  # Silence start time (relative to clip start)
+    end: float  # Silence end time (relative to clip start)
+    keep_ms: int  # How many milliseconds to keep (instead of preset default)
+
+
+class ClipBoundaryAdjustment(BaseModel):
+    """Adjustment to clip start/end boundaries."""
+    start_offset: float = 0.0  # Seconds to add/subtract from start
+    end_offset: float = 0.0  # Seconds to add/subtract from end
+
+
+class ClipAdjustments(BaseModel):
+    """Adjustments to apply when exporting a clip."""
+    boundaries: Optional[ClipBoundaryAdjustment] = None
+    silence_overrides: Optional[List[SilenceOverride]] = None
+    max_kept_silence_ms: Optional[int] = None  # Override preset default
+
+
+class PlatformAdjustments(BaseModel):
+    """
+    Adjustments for export with base + per-platform overrides.
+
+    The base adjustments apply to all platforms.
+    Per-platform overrides can customize specific platforms.
+    """
+    base: Optional[ClipAdjustments] = None
+    # Platform-specific overrides (e.g., {"linkedin": {...}, "tiktok": {...}})
+    overrides: Optional[dict] = None  # Dict[str, ClipAdjustments]
+
+
 # Export schemas
 class ExportRequest(BaseModel):
     """Request to export a clip to one or more platforms."""
     platforms: List[Platform] = Field(..., min_length=1)
     preset: SilencePreset = SilencePreset.LINKEDIN
     include_captions: bool = True
+    adjustments: Optional[PlatformAdjustments] = None
 
 
 class ExportResponse(BaseModel):
@@ -176,6 +210,60 @@ class ExportListResponse(BaseModel):
     """Response for listing exports."""
     exports: List[ExportResponse]
     total: int
+
+
+# VAD Analysis schemas
+class SpeechSegment(BaseModel):
+    """A detected speech segment."""
+    start: float
+    end: float
+
+
+class SilenceSegment(BaseModel):
+    """A detected silence segment."""
+    start: float
+    end: float
+
+
+class EditDecision(BaseModel):
+    """Decision about what to do with a segment."""
+    start: float
+    end: float
+    action: str  # "keep", "remove", "trim"
+    reason: str
+    original_duration: float
+    new_duration: float
+
+
+class PresetConfigResponse(BaseModel):
+    """Configuration for a platform preset."""
+    vad_threshold: float
+    min_silence_ms: int
+    max_kept_silence_ms: int
+    speech_padding_ms: int
+    crossfade_ms: int
+
+
+class VADAnalysisResponse(BaseModel):
+    """Voice Activity Detection analysis for waveform visualization."""
+    speech_segments: List[SpeechSegment]
+    silence_segments: List[SilenceSegment]
+    duration: float
+    preset: str
+    config: PresetConfigResponse
+
+
+class ClipPreviewMetadata(BaseModel):
+    """Metadata about a clip preview with editing applied."""
+    original_duration: float
+    edited_duration: float
+    time_saved: float
+    percent_reduction: float
+    speech_segments: List[SpeechSegment]
+    silence_segments: List[SilenceSegment]
+    edit_decisions: List[EditDecision]
+    preset: str
+    config: PresetConfigResponse
 
 
 # Health check

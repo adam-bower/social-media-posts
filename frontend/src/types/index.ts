@@ -106,10 +106,82 @@ export interface Export {
   completed_at?: string;
 }
 
+// VAD Analysis Types
+export interface SpeechSegment {
+  start: number;
+  end: number;
+}
+
+export interface SilenceSegment {
+  start: number;
+  end: number;
+}
+
+export interface EditDecision {
+  start: number;
+  end: number;
+  action: 'keep' | 'remove' | 'trim';
+  reason: string;
+  original_duration: number;
+  new_duration: number;
+}
+
+export interface PresetConfig {
+  vad_threshold: number;
+  min_silence_ms: number;
+  max_kept_silence_ms: number;
+  speech_padding_ms: number;
+  crossfade_ms: number;
+}
+
+export interface VADAnalysis {
+  speech_segments: SpeechSegment[];
+  silence_segments: SilenceSegment[];
+  duration: number;
+  preset: SilencePreset;
+  config: PresetConfig;
+}
+
+export interface ClipPreviewMetadata {
+  original_duration: number;
+  edited_duration: number;
+  time_saved: number;
+  percent_reduction: number;
+  speech_segments: SpeechSegment[];
+  silence_segments: SilenceSegment[];
+  edit_decisions: EditDecision[];
+  preset: SilencePreset;
+  config: PresetConfig;
+}
+
+// Clip Adjustment Types
+export interface SilenceOverride {
+  start: number;  // Silence start time (relative to clip start)
+  end: number;    // Silence end time (relative to clip start)
+  keep_ms: number; // How many milliseconds to keep
+}
+
+export interface ClipBoundaryAdjustment {
+  start_offset: number;  // Seconds to add/subtract from start
+  end_offset: number;    // Seconds to add/subtract from end
+}
+
+export interface ClipAdjustments {
+  boundaries?: ClipBoundaryAdjustment;
+  silence_overrides?: SilenceOverride[];
+  max_kept_silence_ms?: number;  // Override preset default
+}
+
+export interface PlatformAdjustments {
+  base?: ClipAdjustments;
+  overrides?: Record<Platform, ClipAdjustments>;
+}
+
 export interface ExportRequest {
   platforms: Platform[];
   preset: SilencePreset;
   include_captions: boolean;
+  adjustments?: PlatformAdjustments;
 }
 
 export interface ExportCreateResponse {

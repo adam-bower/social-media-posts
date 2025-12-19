@@ -280,6 +280,7 @@ class Database:
         platform: str,
         format_preset: str = "linkedin",
         include_captions: bool = True,
+        adjustments: Optional[Dict] = None,
     ) -> Dict:
         """Create an export job."""
         data = {
@@ -288,6 +289,7 @@ class Database:
             "platform": platform,
             "format_preset": format_preset,
             "include_captions": include_captions,
+            "adjustments": adjustments,
             "status": "pending",
             "progress": 0,
         }

@@ -9,7 +9,16 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.database import db
-from api.models.schemas import VideoResponse, VideoStatusResponse
+from api.models.schemas import (
+    VideoResponse,
+    VideoStatusResponse,
+    VADAnalysisResponse,
+    ClipPreviewMetadata,
+    SpeechSegment as SpeechSegmentSchema,
+    SilenceSegment as SilenceSegmentSchema,
+    EditDecision as EditDecisionSchema,
+    PresetConfigResponse,
+)
 
 router = APIRouter()
 
@@ -297,6 +306,91 @@ async def get_video_audio(video_id: str):
     )
 
 
+@router.get("/videos/{video_id}/vad-analysis", response_model=VADAnalysisResponse)
+async def get_vad_analysis_endpoint(
+    video_id: str,
+    preset: str = "linkedin",
+):
+    """
+    Get Voice Activity Detection analysis for a video's audio.
+
+    Returns speech and silence segments detected by Silero VAD.
+    This data is used by the frontend to visualize the waveform
+    with trim regions.
+
+    Args:
+        video_id: Video ID
+        preset: Platform preset (linkedin, youtube_shorts, tiktok, podcast)
+            Different presets have different silence thresholds.
+
+    Returns:
+        VADAnalysisResponse with speech_segments, silence_segments, duration, config
+    """
+    from src.video.waveform_silence_remover import get_vad_analysis
+
+    video = db.get_video(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Get audio path
+    audio_path = video.get("audio_path")
+    if not audio_path:
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "audio")
+        audio_path = os.path.join(data_dir, f"{video_id}.wav")
+
+    if not audio_path or not os.path.exists(audio_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file not found. Video may not have been processed yet.",
+        )
+
+    # Validate preset
+    valid_presets = ["linkedin", "youtube_shorts", "tiktok", "podcast"]
+    if preset not in valid_presets:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid preset. Choose from: {', '.join(valid_presets)}",
+        )
+
+    try:
+        # Get VAD analysis (cached)
+        analysis = get_vad_analysis(audio_path, preset=preset)
+
+        # Convert dataclass objects to Pydantic schemas
+        speech_segments = [
+            SpeechSegmentSchema(start=seg.start, end=seg.end)
+            for seg in analysis["speech_segments"]
+        ]
+        silence_segments = [
+            SilenceSegmentSchema(start=seg.start, end=seg.end)
+            for seg in analysis["silences"]
+        ]
+
+        # Convert PresetConfig to response schema
+        config = analysis["config"]
+        config_response = PresetConfigResponse(
+            vad_threshold=config.vad_threshold,
+            min_silence_ms=config.min_silence_ms,
+            max_kept_silence_ms=config.max_kept_silence_ms,
+            speech_padding_ms=config.speech_padding_ms,
+            crossfade_ms=config.crossfade_ms,
+        )
+
+        return VADAnalysisResponse(
+            speech_segments=speech_segments,
+            silence_segments=silence_segments,
+            duration=analysis["duration"],
+            preset=analysis["preset"],
+            config=config_response,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze audio: {str(e)}",
+        )
+
+
 @router.get("/videos/{video_id}/clip-preview")
 async def get_clip_preview(
     video_id: str,
@@ -304,6 +398,8 @@ async def get_clip_preview(
     end: float,
     edit: bool = True,
     preset: str = "linkedin",
+    return_metadata: bool = False,
+    silence_overrides: Optional[str] = None,
 ):
     """
     Get a preview of a clip from the video's audio.
@@ -314,11 +410,16 @@ async def get_clip_preview(
         end: End time in seconds
         edit: Whether to apply smart editing (remove pauses, stumbles, fillers)
         preset: Editing preset (youtube_shorts, tiktok, linkedin, podcast)
+        return_metadata: If true, return JSON metadata instead of audio file
+        silence_overrides: JSON string of silence override adjustments
+            Format: [{"start": 1.5, "end": 2.0, "keep_ms": 200}, ...]
+            This allows the frontend to specify custom trim amounts for specific silences.
 
     Returns:
-        WAV audio file of the clip
+        WAV audio file of the clip, or ClipPreviewMetadata JSON if return_metadata=true
     """
     import subprocess
+    import json as json_lib
 
     video = db.get_video(video_id)
     if not video:
@@ -340,6 +441,25 @@ async def get_clip_preview(
     if start < 0 or end <= start:
         raise HTTPException(status_code=400, detail="Invalid time range")
 
+    # Validate preset
+    valid_presets = ["linkedin", "youtube_shorts", "tiktok", "podcast"]
+    if preset not in valid_presets:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid preset. Choose from: {', '.join(valid_presets)}",
+        )
+
+    # Parse silence overrides if provided
+    parsed_overrides = None
+    if silence_overrides:
+        try:
+            parsed_overrides = json_lib.loads(silence_overrides)
+        except json_lib.JSONDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid silence_overrides JSON format",
+            )
+
     # Create temp output file with unique name based on all parameters
     temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "temp")
     os.makedirs(temp_dir, exist_ok=True)
@@ -348,27 +468,119 @@ async def get_clip_preview(
 
     try:
         if edit:
-            # Get transcript for smart editing
-            transcript = db.get_transcript(video_id)
-            if not transcript or not transcript.get("segments"):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Transcript not available for smart editing. Try with edit=false.",
+            # Use waveform-based editing (Silero VAD) for better accuracy
+            from src.video.waveform_silence_remover import (
+                get_vad_analysis,
+                process_clip_waveform_only,
+                PRESETS,
+                PlatformPreset,
+            )
+
+            # Get VAD analysis for the clip range
+            vad_analysis = get_vad_analysis(audio_path, preset=preset)
+
+            # Map preset string to enum
+            preset_map = {
+                "linkedin": PlatformPreset.LINKEDIN,
+                "youtube_shorts": PlatformPreset.YOUTUBE_SHORTS,
+                "tiktok": PlatformPreset.TIKTOK,
+                "podcast": PlatformPreset.PODCAST,
+            }
+            preset_enum = preset_map.get(preset, PlatformPreset.LINKEDIN)
+            config = PRESETS[preset_enum]
+
+            # Build custom config if overrides provided
+            custom_config = None
+            if parsed_overrides:
+                # For now, overrides are per-silence adjustments
+                # We'll apply them during processing
+                custom_config = {
+                    "silence_overrides": parsed_overrides,
+                }
+
+            # Process the clip with waveform-based silence removal
+            result = process_clip_waveform_only(
+                audio_path=audio_path,
+                output_path=output_path if not return_metadata else None,
+                preset=preset,
+                clip_start=start,
+                clip_end=end,
+                config=custom_config,
+            )
+
+            if return_metadata:
+                # Filter segments to clip range
+                clip_speech = [
+                    SpeechSegmentSchema(
+                        start=max(seg.start, start) - start,
+                        end=min(seg.end, end) - start,
+                    )
+                    for seg in vad_analysis["speech_segments"]
+                    if seg.end > start and seg.start < end
+                ]
+                clip_silence = [
+                    SilenceSegmentSchema(
+                        start=max(seg.start, start) - start,
+                        end=min(seg.end, end) - start,
+                    )
+                    for seg in vad_analysis["silences"]
+                    if seg.end > start and seg.start < end
+                ]
+
+                # Convert edit decisions
+                edit_decisions = [
+                    EditDecisionSchema(
+                        start=d["start"],
+                        end=d["end"],
+                        action=d["action"],
+                        reason=d["reason"],
+                        original_duration=d["original_duration"],
+                        new_duration=d["new_duration"],
+                    )
+                    for d in result.get("decisions", [])
+                ]
+
+                config_response = PresetConfigResponse(
+                    vad_threshold=config.vad_threshold,
+                    min_silence_ms=config.min_silence_ms,
+                    max_kept_silence_ms=config.max_kept_silence_ms,
+                    speech_padding_ms=config.speech_padding_ms,
+                    crossfade_ms=config.crossfade_ms,
                 )
 
-            # Use smart editor
-            from src.video.audio_assembler import create_edited_clip
-
-            result = create_edited_clip(
-                audio_path,
-                transcript["segments"],
-                start,
-                end,
-                preset,
-                output_path,
-            )
-            # Result contains time_savings info but we just return the file
+                return ClipPreviewMetadata(
+                    original_duration=result["original_duration"],
+                    edited_duration=result["edited_duration"],
+                    time_saved=result["time_saved"],
+                    percent_reduction=result["percent_reduction"],
+                    speech_segments=clip_speech,
+                    silence_segments=clip_silence,
+                    edit_decisions=edit_decisions,
+                    preset=preset,
+                    config=config_response,
+                )
         else:
+            if return_metadata:
+                # For unedited clips, just return basic info
+                original_duration = end - start
+                return ClipPreviewMetadata(
+                    original_duration=original_duration,
+                    edited_duration=original_duration,
+                    time_saved=0.0,
+                    percent_reduction=0.0,
+                    speech_segments=[],
+                    silence_segments=[],
+                    edit_decisions=[],
+                    preset=preset,
+                    config=PresetConfigResponse(
+                        vad_threshold=0.5,
+                        min_silence_ms=500,
+                        max_kept_silence_ms=700,
+                        speech_padding_ms=150,
+                        crossfade_ms=10,
+                    ),
+                )
+
             # Just extract the clip without editing
             cmd = [
                 "ffmpeg", "-y",
@@ -385,6 +597,8 @@ async def get_clip_preview(
             media_type="audio/wav",
             filename=f"clip_{start:.1f}_{end:.1f}.wav",
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate clip preview: {str(e)}")
 

@@ -12,6 +12,10 @@ import type {
   ExportListResponse,
   Platform,
   SilencePreset,
+  VADAnalysis,
+  ClipPreviewMetadata,
+  PlatformAdjustments,
+  SilenceOverride,
 } from '../types';
 
 // Use environment variable for API URL, fallback to relative path for local dev
@@ -172,21 +176,67 @@ export function getClipPreviewUrl(
   return `${API_BASE}/videos/${videoId}/clip-preview?${params}`;
 }
 
+// VAD Analysis
+export async function getVADAnalysis(
+  videoId: string,
+  preset: SilencePreset = 'linkedin'
+): Promise<VADAnalysis> {
+  const params = new URLSearchParams({ preset });
+  const response = await fetch(`${API_BASE}/videos/${videoId}/vad-analysis?${params}`);
+  return handleResponse<VADAnalysis>(response);
+}
+
+// Clip Preview Metadata
+export async function getClipPreviewMetadata(
+  videoId: string,
+  startTime: number,
+  endTime: number,
+  preset: SilencePreset = 'linkedin',
+  silenceOverrides?: SilenceOverride[]
+): Promise<ClipPreviewMetadata> {
+  const params = new URLSearchParams({
+    start: String(startTime),
+    end: String(endTime),
+    edit: 'true',
+    preset: preset,
+    return_metadata: 'true',
+  });
+
+  if (silenceOverrides && silenceOverrides.length > 0) {
+    params.set('silence_overrides', JSON.stringify(silenceOverrides));
+  }
+
+  const response = await fetch(`${API_BASE}/videos/${videoId}/clip-preview?${params}`);
+  return handleResponse<ClipPreviewMetadata>(response);
+}
+
 // Exports
 export async function createExport(
   clipId: string,
   platforms: Platform[],
   preset: SilencePreset = 'linkedin',
-  includeCaptions: boolean = true
+  includeCaptions: boolean = true,
+  adjustments?: PlatformAdjustments
 ): Promise<ExportCreateResponse> {
+  const body: {
+    platforms: Platform[];
+    preset: SilencePreset;
+    include_captions: boolean;
+    adjustments?: PlatformAdjustments;
+  } = {
+    platforms,
+    preset,
+    include_captions: includeCaptions,
+  };
+
+  if (adjustments) {
+    body.adjustments = adjustments;
+  }
+
   const response = await fetch(`${API_BASE}/clips/${clipId}/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      platforms,
-      preset,
-      include_captions: includeCaptions,
-    }),
+    body: JSON.stringify(body),
   });
   return handleResponse<ExportCreateResponse>(response);
 }
@@ -242,6 +292,8 @@ export const api = {
   approveClip,
   rejectClip,
   composeClips,
+  getVADAnalysis,
+  getClipPreviewMetadata,
   createExport,
   getExports,
   getExport,

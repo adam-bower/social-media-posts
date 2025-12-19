@@ -65,6 +65,7 @@ async def process_export(export_id: str):
     platform = export["platform"]
     preset = export.get("format_preset", "linkedin")
     include_captions = export.get("include_captions", True)
+    adjustments = export.get("adjustments")
 
     # Get clip and video info
     clip = db.get_clip_suggestion(clip_id)
@@ -112,18 +113,54 @@ async def process_export(export_id: str):
         )
         return
 
+    # Apply adjustments to clip boundaries if provided
+    clip_start = clip["start_time"]
+    clip_end = clip["end_time"]
+
+    # Build silence config from adjustments
+    silence_config = None
+
+    if adjustments:
+        # Apply boundary adjustments
+        boundaries = adjustments.get("boundaries")
+        if boundaries:
+            clip_start += boundaries.get("start_offset", 0.0)
+            clip_end += boundaries.get("end_offset", 0.0)
+
+        # Build silence config
+        silence_overrides = adjustments.get("silence_overrides")
+        max_kept_silence_ms = adjustments.get("max_kept_silence_ms")
+
+        if silence_overrides or max_kept_silence_ms:
+            silence_config = {}
+            if max_kept_silence_ms is not None:
+                silence_config["max_kept_silence_ms"] = max_kept_silence_ms
+            if silence_overrides:
+                silence_config["silence_overrides"] = silence_overrides
+
     try:
         db.update_export(export_id, progress=20)
 
-        # Run the export
+        # Build ExportConfig if we have adjustments
+        export_config = None
+        if silence_config:
+            from src.video.clip_exporter import ExportConfig
+            export_config = ExportConfig(
+                silence_preset=preset,
+                silence_config=silence_config,
+                include_captions=include_captions,
+            )
+
+        # Run the export with adjustments
         result = export_clip(
             video_path=video_path,
-            clip_start=clip["start_time"],
-            clip_end=clip["end_time"],
+            clip_start=clip_start,
+            clip_end=clip_end,
             output_path=output_path,
             format_type=platform,
             preset=preset,
             transcript=transcript,
+            config=export_config,
         )
 
         db.update_export(export_id, progress=90)
@@ -201,12 +238,33 @@ async def create_export(
     # Create export jobs for each platform
     exports = []
     for platform in platforms:
+        # Merge base adjustments with platform-specific overrides
+        platform_adjustments = None
+        if request.adjustments:
+            # Start with base adjustments
+            base = request.adjustments.base
+            if base:
+                platform_adjustments = base.model_dump(exclude_none=True)
+
+            # Apply platform-specific overrides if present
+            overrides = request.adjustments.overrides
+            if overrides and platform.value in overrides:
+                platform_override = overrides[platform.value]
+                if platform_adjustments:
+                    # Merge override into base
+                    for key, value in platform_override.items():
+                        if value is not None:
+                            platform_adjustments[key] = value
+                else:
+                    platform_adjustments = platform_override
+
         export = db.create_export(
             clip_id=clip_id,
             video_id=video_id,
             platform=platform.value,
             format_preset=request.preset.value,
             include_captions=request.include_captions,
+            adjustments=platform_adjustments,
         )
         if export:
             exports.append(export)
