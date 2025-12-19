@@ -271,6 +271,85 @@ class Database:
         )
         return result.data or []
 
+    # ==================== Exports ====================
+
+    def create_export(
+        self,
+        clip_id: str,
+        video_id: str,
+        platform: str,
+        format_preset: str = "linkedin",
+        include_captions: bool = True,
+    ) -> Dict:
+        """Create an export job."""
+        data = {
+            "clip_id": clip_id,
+            "video_id": video_id,
+            "platform": platform,
+            "format_preset": format_preset,
+            "include_captions": include_captions,
+            "status": "pending",
+            "progress": 0,
+        }
+
+        result = self.client.table("exports").insert(data).execute()
+        return result.data[0] if result.data else None
+
+    def get_export(self, export_id: str) -> Optional[Dict]:
+        """Get export by ID."""
+        result = (
+            self.client.table("exports")
+            .select("*")
+            .eq("id", export_id)
+            .execute()
+        )
+        return result.data[0] if result.data else None
+
+    def update_export(self, export_id: str, **kwargs) -> Optional[Dict]:
+        """Update export fields."""
+        kwargs["updated_at"] = datetime.utcnow().isoformat()
+        result = (
+            self.client.table("exports")
+            .update(kwargs)
+            .eq("id", export_id)
+            .execute()
+        )
+        return result.data[0] if result.data else None
+
+    def list_exports(
+        self,
+        video_id: Optional[str] = None,
+        clip_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict]:
+        """List exports with optional filters."""
+        query = self.client.table("exports").select("*")
+
+        if video_id:
+            query = query.eq("video_id", video_id)
+        if clip_id:
+            query = query.eq("clip_id", clip_id)
+        if status:
+            query = query.eq("status", status)
+
+        query = query.order("created_at", desc=True).limit(limit)
+        result = query.execute()
+
+        return result.data or []
+
+    def get_pending_exports(self, limit: int = 10) -> List[Dict]:
+        """Get pending exports for processing."""
+        result = (
+            self.client.table("exports")
+            .select("*")
+            .eq("status", "pending")
+            .order("created_at")
+            .limit(limit)
+            .execute()
+        )
+        return result.data or []
+
 
 # Singleton instance
 db = Database()

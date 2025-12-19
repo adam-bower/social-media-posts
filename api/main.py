@@ -80,12 +80,13 @@ async def api_health_check():
 
 
 # Include routers
-from api.routes import upload, videos, transcripts, clips
+from api.routes import upload, videos, transcripts, clips, exports
 
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(videos.router, prefix="/api", tags=["videos"])
 app.include_router(transcripts.router, prefix="/api", tags=["transcripts"])
 app.include_router(clips.router, prefix="/api", tags=["clips"])
+app.include_router(exports.router, prefix="/api", tags=["exports"])
 
 
 if __name__ == "__main__":
