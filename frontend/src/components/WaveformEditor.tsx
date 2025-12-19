@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
+import ZoomPlugin from 'wavesurfer.js/dist/plugins/zoom.js';
 import type { SpeechSegment, SilenceSegment, PresetConfig } from '../types';
 
 export interface SilenceAdjustment {
@@ -38,6 +39,9 @@ function formatTimeShort(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Context padding in seconds
+const CONTEXT_PADDING = 5;
+
 export function WaveformEditor({
   audioUrl,
   startTime,
@@ -55,6 +59,7 @@ export function WaveformEditor({
   readOnly = false,
 }: WaveformEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<RegionsPlugin | null>(null);
   const clipRegionRef = useRef<any>(null);
@@ -65,9 +70,17 @@ export function WaveformEditor({
   const [currentTime, setCurrentTime] = useState(startTime);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(50); // pixels per second
 
   // Get max kept silence from config or default
   const maxKeptSilenceMs = presetConfig?.max_kept_silence_ms ?? 700;
+
+  // Calculate the view window with 5s padding around clip content
+  const viewWindow = useMemo(() => {
+    const viewStart = Math.max(0, startTime - CONTEXT_PADDING);
+    const viewEnd = endTime + CONTEXT_PADDING;
+    return { start: viewStart, end: viewEnd, duration: viewEnd - viewStart };
+  }, [startTime, endTime]);
 
   // Calculate which silences will be trimmed
   const getEffectiveSilences = useCallback(() => {
@@ -89,12 +102,27 @@ export function WaveformEditor({
     });
   }, [silenceSegments, silenceAdjustments, maxKeptSilenceMs]);
 
+  // Calculate optimal zoom level based on container width
+  const calculateOptimalZoom = useCallback((containerWidth: number) => {
+    // We want to show the view window (clip + 5s padding on each side)
+    const viewDuration = viewWindow.duration;
+    // Calculate pixels per second to fit view window in container
+    const optimalPxPerSec = containerWidth / viewDuration;
+    // Clamp between reasonable bounds
+    return Math.max(10, Math.min(500, optimalPxPerSec));
+  }, [viewWindow.duration]);
+
   // Initialize WaveSurfer
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !scrollContainerRef.current) return;
 
     const regions = RegionsPlugin.create();
     regionsRef.current = regions;
+
+    const zoom = ZoomPlugin.create({
+      scale: 0.5,
+      maxZoom: 500,
+    });
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
@@ -107,14 +135,33 @@ export function WaveformEditor({
       barGap: 1,
       barRadius: 2,
       normalize: true,
-      plugins: [regions],
+      minPxPerSec: 10, // Minimum zoom
+      plugins: [regions, zoom],
     });
 
     wavesurferRef.current = ws;
 
     ws.on('ready', () => {
+      const audioDuration = ws.getDuration();
       setIsReady(true);
-      setDuration(ws.getDuration());
+      setDuration(audioDuration);
+
+      // Calculate optimal zoom to show clip with 5s padding
+      if (scrollContainerRef.current) {
+        const containerWidth = scrollContainerRef.current.clientWidth;
+        const optimalZoom = calculateOptimalZoom(containerWidth);
+        setZoomLevel(optimalZoom);
+        ws.zoom(optimalZoom);
+
+        // Scroll to show the view window (centered on clip)
+        setTimeout(() => {
+          if (scrollContainerRef.current) {
+            const scrollPosition = viewWindow.start * optimalZoom;
+            scrollContainerRef.current.scrollLeft = scrollPosition;
+          }
+        }, 100);
+      }
+
       updateRegions();
     });
 
@@ -263,6 +310,37 @@ export function WaveformEditor({
     }
   }, [startTime, endTime, isReady]);
 
+  // Handle zoom changes
+  const handleZoom = useCallback((newZoom: number) => {
+    if (!wavesurferRef.current || !isReady) return;
+    const clampedZoom = Math.max(10, Math.min(500, newZoom));
+    setZoomLevel(clampedZoom);
+    wavesurferRef.current.zoom(clampedZoom);
+  }, [isReady]);
+
+  const handleZoomIn = useCallback(() => {
+    handleZoom(zoomLevel * 1.5);
+  }, [zoomLevel, handleZoom]);
+
+  const handleZoomOut = useCallback(() => {
+    handleZoom(zoomLevel / 1.5);
+  }, [zoomLevel, handleZoom]);
+
+  const handleZoomFit = useCallback(() => {
+    if (!scrollContainerRef.current || !isReady) return;
+    const containerWidth = scrollContainerRef.current.clientWidth;
+    const optimalZoom = calculateOptimalZoom(containerWidth);
+    handleZoom(optimalZoom);
+
+    // Scroll to view window
+    setTimeout(() => {
+      if (scrollContainerRef.current) {
+        const scrollPosition = viewWindow.start * optimalZoom;
+        scrollContainerRef.current.scrollLeft = scrollPosition;
+      }
+    }, 50);
+  }, [isReady, calculateOptimalZoom, handleZoom, viewWindow.start]);
+
   const handlePlayPause = useCallback(() => {
     if (!wavesurferRef.current || !isReady) return;
 
@@ -278,11 +356,14 @@ export function WaveformEditor({
   }, [isReady, isPlaying, startTime, endTime, currentTime]);
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!wavesurferRef.current || !isReady || !containerRef.current) return;
+    if (!wavesurferRef.current || !isReady || !containerRef.current || !scrollContainerRef.current) return;
 
+    const scrollContainer = scrollContainerRef.current;
     const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
+    const scrollLeft = scrollContainer.scrollLeft;
+    const x = e.clientX - rect.left + scrollLeft;
+    const totalWidth = containerRef.current.scrollWidth;
+    const percentage = x / totalWidth;
     const time = percentage * duration;
 
     // Clamp to clip bounds
@@ -305,10 +386,55 @@ export function WaveformEditor({
 
   return (
     <div className="space-y-3">
-      {/* Waveform container */}
+      {/* Zoom controls */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleZoomOut}
+            disabled={!isReady || zoomLevel <= 10}
+            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Zoom out"
+          >
+            <svg className="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+            </svg>
+          </button>
+          <button
+            onClick={handleZoomFit}
+            disabled={!isReady}
+            className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs text-zinc-300"
+            title="Fit to view"
+          >
+            Fit
+          </button>
+          <button
+            onClick={handleZoomIn}
+            disabled={!isReady || zoomLevel >= 500}
+            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Zoom in"
+          >
+            <svg className="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+            </svg>
+          </button>
+          <span className="text-xs text-zinc-500 ml-2">
+            {Math.round(zoomLevel)} px/s
+          </span>
+        </div>
+
+        {/* Current time indicator */}
+        {isReady && (
+          <div className="px-2 py-1 bg-zinc-800 rounded text-xs font-mono text-white">
+            {formatTime(currentTime)}
+          </div>
+        )}
+      </div>
+
+      {/* Waveform container with horizontal scroll */}
       <div
-        className="relative bg-zinc-900 rounded-lg overflow-hidden cursor-crosshair border border-zinc-700"
-        onClick={handleSeek}
+        ref={scrollContainerRef}
+        className="relative bg-zinc-900 rounded-lg overflow-x-auto overflow-y-hidden border border-zinc-700"
+        style={{ maxHeight: compact ? 80 : 112 }}
       >
         {/* Loading state */}
         {!isReady && (
@@ -321,14 +447,12 @@ export function WaveformEditor({
         )}
 
         {/* WaveSurfer container */}
-        <div ref={containerRef} className="w-full" />
-
-        {/* Current time indicator */}
-        {isReady && (
-          <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs font-mono text-white">
-            {formatTime(currentTime)}
-          </div>
-        )}
+        <div
+          ref={containerRef}
+          className="cursor-crosshair"
+          onClick={handleSeek}
+          style={{ minWidth: '100%' }}
+        />
 
         {/* Legend */}
         {isReady && (speechSegments.length > 0 || silenceSegments.length > 0) && (
@@ -355,6 +479,13 @@ export function WaveformEditor({
           </div>
         )}
       </div>
+
+      {/* Scroll hint */}
+      {isReady && duration > 0 && (
+        <div className="text-xs text-zinc-500 text-center">
+          Scroll horizontally to navigate • Use zoom controls or pinch to zoom
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex items-center justify-between gap-4">
