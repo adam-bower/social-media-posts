@@ -71,6 +71,40 @@ return handleResponse<TypeName>(response);
 ```
 
 ## Next Steps
-1. Start with backend `/vad-analysis` endpoint
-2. Then frontend types and API client
-3. Then enhance WaveformEditor with silence visualization
+1. Test on mobile devices (touch interactions, zoom gestures)
+2. Test with long clips (performance)
+3. Test edge cases (no silence, all silence)
+
+---
+
+## Session 2025-12-19 Notes
+
+### Progress Made
+- Fixed Docker container environment variables (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY were missing)
+- Fixed torchaudio/torchcodec compatibility issue by pinning `torch<2.9.0` and `torchaudio<2.9.0`
+- Added `backend="soundfile"` to torchaudio.load() calls
+- Updated docker-compose.yml to use `env_file: ../.env` instead of individual environment variables
+- Fixed CORS issue for Vercel frontend (`frontend-flax-sigma-15.vercel.app`)
+- **Added zoom controls to WaveformEditor**:
+  - Zoom in/out/fit buttons
+  - Default view shows clip with 5s context padding on each side
+  - Horizontal scroll for navigating zoomed waveform
+  - Pinch-to-zoom support via WaveSurfer ZoomPlugin
+
+### Discoveries
+- torchaudio 2.9+ requires torchcodec for its new backend - must pin to < 2.9 or use soundfile backend
+- Docker `compose restart` doesn't reload env_file - need `down` + `up` to apply env changes
+- FastAPI CORSMiddleware doesn't support wildcards like `https://*.vercel.app` - need explicit origins
+
+### Key Files Modified
+- `frontend/src/components/WaveformEditor.tsx` - Added ZoomPlugin, zoom controls, horizontal scroll
+- `requirements.txt` - Pinned torch and torchaudio versions
+- `docker/docker-compose.yml` - Switched to env_file
+- `src/video/waveform_silence_remover.py` - Added backend="soundfile" parameter
+
+### Deployed
+- Frontend: https://frontend-flax-sigma-15.vercel.app (via Vercel CLI)
+- Backend: https://video-clipper.ab-civil.com (Hetzner Docker)
+
+### Blockers/Issues
+- None currently - feature is deployed and working

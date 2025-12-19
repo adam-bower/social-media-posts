@@ -121,9 +121,29 @@
 - [ ] Test on mobile (touch interactions)
 - [ ] Test with long clips (performance)
 - [ ] Test edge cases (no silence, all silence)
-- [ ] Deploy frontend to Vercel
-- [ ] Sync updated code to server container
-- [ ] Verify end-to-end flow
+- [x] Deploy frontend to Vercel
+  - Deployed via `vercel --prod` CLI
+  - URL: https://frontend-flax-sigma-15.vercel.app
+- [x] Sync updated code to server container
+  - Rsync to Hetzner, Docker rebuild with `--no-cache`
+  - Fixed torchaudio < 2.9 pinning for Silero VAD compatibility
+  - Fixed CORS for Vercel origin
+- [x] Verify end-to-end flow
+  - VAD analysis endpoint working
+  - Waveform editor loading with zoom controls
+
+## Phase 9: Waveform Zoom Feature (NEW - Completed)
+- [x] Add zoom controls to WaveformEditor
+  - Zoom in/out buttons with 1.5x multiplier
+  - Fit button to reset to optimal view
+  - Zoom level indicator (px/s)
+- [x] Default to clip-focused view
+  - Shows clip with 5s context padding on each side
+  - Auto-scrolls to clip position on load
+- [x] Horizontal scroll container
+  - Waveform scrolls horizontally when zoomed
+- [x] Pinch-to-zoom support
+  - WaveSurfer ZoomPlugin enabled
 
 ## Local Testing URLs
 - Frontend: http://localhost:3000
