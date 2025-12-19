@@ -178,14 +178,15 @@ TARGET: LinkedIn (90-180 seconds MINIMUM, can go to 3 min)
 - End with actionable insight or thought-provoking question
 
 CRITICAL: LinkedIn audience WATCHES longer videos. They've given feedback they watch full videos.
-- MINIMUM 90 seconds per clip - anything shorter is wasted potential
-- IDEAL is 2-3 minutes for a complete story/lesson
+- MOST clips should be 90-180 seconds (1.5 to 3 minutes)
+- A few punchy 30-60 second clips are OK if the content is self-contained and powerful
 - MAXIMUM 4 minutes - beyond this, split into separate clips
-- Do NOT create clips under 60 seconds for LinkedIn
 - Let stories and explanations breathe - don't rush to cut
-- A single 3-minute clip with full context beats three 30-second fragments
+- A 3-minute clip with full context beats chopping it into fragments
 - If a topic takes 2-3 minutes to explain properly, INCLUDE ALL OF IT
-- But if it takes 5+ minutes, find a natural break point and make two clips""",
+- But if it takes 5+ minutes, find a natural break point and make two clips
+
+BALANCE: Out of 5 clips, aim for ~3-4 longer ones (90-180s) and ~1-2 shorter punchy ones (30-60s)""",
 
         "youtube_shorts": """
 TARGET: YouTube Shorts (15-60 seconds)
@@ -360,12 +361,12 @@ Find the best {num_clips} clips from this content. Remember:
 - Find strong hooks and satisfying endings
 - Be honest about confidence levels
 
-FOR LINKEDIN: Each clip should be 90-240 seconds (1.5 to 4 minutes).
-- MINIMUM: 90 seconds
-- IDEAL: 2-3 minutes
-- MAXIMUM: 4 minutes (split longer topics into separate clips)
-DO NOT create short 15-30 second clips. Adam's audience watches full videos.
-Better to have 2-3 longer complete clips than 5-6 short fragments.
+FOR LINKEDIN:
+- MOST clips: 90-180 seconds (1.5-3 min) - complete stories/lessons
+- SOME clips: 30-60 seconds OK if punchy and self-contained
+- MAX: 4 minutes (split longer topics)
+Aim for a MIX: ~3-4 longer clips + ~1-2 shorter punchy ones.
+Adam's audience watches full videos, but a great 30-second clip still works.
 
 Return as JSON array."""
 
