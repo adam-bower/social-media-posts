@@ -169,16 +169,23 @@ TARGET: TikTok / YouTube Shorts (15-60 seconds)
 - Quick cuts are fine - attention span is short""",
 
         "linkedin": """
-TARGET: LinkedIn (45-180 seconds, can go to 3 min for great content)
+TARGET: LinkedIn (90-180 seconds MINIMUM, can go to 3 min)
 - Professional but authentic - Adam's real voice
 - Hook should pose a problem, share a lesson, or make a bold statement
 - Build to a clear professional takeaway
 - Educational value is key
 - Stories and real experiences perform best
 - End with actionable insight or thought-provoking question
-- LONGER IS BETTER if the content is compelling and complete
-- Don't cut good content short - let stories breathe
-- A 2-3 minute clip with a complete narrative beats a 30s fragment""",
+
+CRITICAL: LinkedIn audience WATCHES longer videos. They've given feedback they watch full videos.
+- MINIMUM 90 seconds per clip - anything shorter is wasted potential
+- IDEAL is 2-3 minutes for a complete story/lesson
+- MAXIMUM 4 minutes - beyond this, split into separate clips
+- Do NOT create clips under 60 seconds for LinkedIn
+- Let stories and explanations breathe - don't rush to cut
+- A single 3-minute clip with full context beats three 30-second fragments
+- If a topic takes 2-3 minutes to explain properly, INCLUDE ALL OF IT
+- But if it takes 5+ minutes, find a natural break point and make two clips""",
 
         "youtube_shorts": """
 TARGET: YouTube Shorts (15-60 seconds)
@@ -352,6 +359,13 @@ Find the best {num_clips} clips from this content. Remember:
 - Look for segments that match the AB Civil voice and topics
 - Find strong hooks and satisfying endings
 - Be honest about confidence levels
+
+FOR LINKEDIN: Each clip should be 90-240 seconds (1.5 to 4 minutes).
+- MINIMUM: 90 seconds
+- IDEAL: 2-3 minutes
+- MAXIMUM: 4 minutes (split longer topics into separate clips)
+DO NOT create short 15-30 second clips. Adam's audience watches full videos.
+Better to have 2-3 longer complete clips than 5-6 short fragments.
 
 Return as JSON array."""
 
