@@ -60,13 +60,11 @@ def process_video_pipeline(video_id: str):
     Stages:
     1. Extract audio
     2. Transcribe with faster-whisper
-    3. Detect silences
-    4. Generate clip suggestions
+    3. Generate clip suggestions with Sonnet 4.5 (AB Civil context)
     """
     from src.video.audio_extractor import extract_audio, get_video_info
     from src.video.transcriber import transcribe_audio
-    from src.video.silence_detector import detect_silences
-    from src.video.clip_suggester import suggest_clips
+    from src.video.clip_composer_v2 import compose_clips
 
     try:
         # Get video record
@@ -106,22 +104,38 @@ def process_video_pipeline(video_id: str):
             processing_time_seconds=transcript["processing_time"],
         )
 
-        # Stage 3: Detect silences
+        # Stage 3: Generate clip suggestions with Sonnet 4.5
         db.update_video_status(video_id, "analyzing")
 
-        silences = detect_silences(audio_path)
-
-        # Stage 4: Generate clip suggestions
-        suggestions = suggest_clips(
-            transcript_text=transcript["text"],
+        # Use the v2 composer with AB Civil context
+        clips = compose_clips(
             segments=transcript["segments"],
-            silences=silences,
             duration=video_info["duration"],
+            platform="linkedin",  # Default to LinkedIn, generates for multiple platforms
+            num_clips=5,
+            audio_path=audio_path,
         )
 
         # Save suggestions to database
-        if suggestions:
-            db.create_clip_suggestions_batch(video_id, suggestions)
+        for clip in clips:
+            segments_list = clip.get("segments", [])
+            if not segments_list:
+                continue
+
+            start_time = segments_list[0]["start_time"]
+            end_time = segments_list[-1]["end_time"]
+
+            db.create_clip_suggestion(
+                video_id=video_id,
+                start_time=start_time,
+                end_time=end_time,
+                transcript_excerpt=clip.get("title", ""),
+                platform=clip.get("platform", "linkedin"),
+                hook_reason=clip.get("hook", ""),
+                confidence_score=clip.get("confidence", 0.8),
+                is_composed=len(segments_list) > 1,
+                composition_segments=segments_list if len(segments_list) > 1 else None,
+            )
 
         # Mark as ready
         db.update_video_status(video_id, "ready")

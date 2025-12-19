@@ -20,16 +20,6 @@ import requests
 load_dotenv()
 
 
-def get_anthropic_key() -> str:
-    """Get Anthropic API key."""
-    key = os.getenv("ANTHROPIC_API_KEY")
-    if key:
-        return key
-    try:
-        import wmill
-        return wmill.get_variable("f/ai/anthropic_api_key")
-    except Exception:
-        raise ValueError("ANTHROPIC_API_KEY not found")
 
 
 def get_supabase_client():
@@ -88,26 +78,38 @@ def fetch_posts_by_topic(topics: List[str], limit: int = 5) -> List[Dict]:
     return unique[:limit]
 
 
+def get_openrouter_key() -> str:
+    """Get OpenRouter API key."""
+    key = os.getenv("OPENROUTER_API_KEY")
+    if key:
+        return key
+    try:
+        import wmill
+        resource = wmill.get_resource("f/ai/openrouter")
+        return resource.get("api_key") or resource.get("token")
+    except Exception:
+        raise ValueError("OPENROUTER_API_KEY not found")
+
+
 def call_sonnet(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = 4096,
 ) -> str:
-    """Call Claude Sonnet 4 directly via Anthropic API."""
-    api_key = get_anthropic_key()
+    """Call Claude Sonnet 4.5 via OpenRouter API."""
+    api_key = get_openrouter_key()
 
     response = requests.post(
-        "https://api.anthropic.com/v1/messages",
+        "https://openrouter.ai/api/v1/chat/completions",
         headers={
-            "x-api-key": api_key,
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01",
         },
         json={
-            "model": "claude-sonnet-4-20250514",
+            "model": "anthropic/claude-sonnet-4.5",
             "max_tokens": max_tokens,
-            "system": system_prompt,
             "messages": [
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         },
@@ -115,7 +117,7 @@ def call_sonnet(
     )
 
     response.raise_for_status()
-    return response.json()["content"][0]["text"]
+    return response.json()["choices"][0]["message"]["content"]
 
 
 AB_CIVIL_CONTEXT = """
@@ -167,14 +169,16 @@ TARGET: TikTok / YouTube Shorts (15-60 seconds)
 - Quick cuts are fine - attention span is short""",
 
         "linkedin": """
-TARGET: LinkedIn (30-90 seconds, can go to 2 min for great content)
+TARGET: LinkedIn (45-180 seconds, can go to 3 min for great content)
 - Professional but authentic - Adam's real voice
 - Hook should pose a problem, share a lesson, or make a bold statement
 - Build to a clear professional takeaway
 - Educational value is key
 - Stories and real experiences perform best
 - End with actionable insight or thought-provoking question
-- Longer form is OK if content is compelling""",
+- LONGER IS BETTER if the content is compelling and complete
+- Don't cut good content short - let stories breathe
+- A 2-3 minute clip with a complete narrative beats a 30s fragment""",
 
         "youtube_shorts": """
 TARGET: YouTube Shorts (15-60 seconds)

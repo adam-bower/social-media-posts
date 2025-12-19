@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { uploadVideo, processVideo, getVideos } from '../api/client';
+import { processVideo, getVideos } from '../api/client';
 import type { UploadResponse, Video } from '../types';
 
 interface VideoUploadProps {
@@ -11,6 +11,9 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState<string | null>(null);
+  const [uploadedBytes, setUploadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [uploadedVideo, setUploadedVideo] = useState<UploadResponse | null>(null);
   const [existingVideos, setExistingVideos] = useState<Video[]>([]);
@@ -59,23 +62,85 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
     setError(null);
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadSpeed(null);
+    setUploadedBytes(0);
+    setTotalBytes(file.size);
 
-    try {
-      // Simulate progress (actual progress would need XMLHttpRequest)
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 10, 90));
-      }, 200);
+    // Use XMLHttpRequest for real upload progress
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('file', file);
 
-      const response = await uploadVideo(file);
+    // Get API base URL
+    const apiBase = import.meta.env.VITE_API_URL || '/api';
 
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      setUploadedVideo(response);
+    // Track upload speed
+    let lastLoaded = 0;
+    let lastTime = Date.now();
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percent);
+        setUploadedBytes(event.loaded);
+
+        // Calculate speed
+        const now = Date.now();
+        const timeDiff = (now - lastTime) / 1000; // seconds
+        if (timeDiff >= 0.5) { // Update speed every 0.5s
+          const bytesDiff = event.loaded - lastLoaded;
+          const bytesPerSec = bytesDiff / timeDiff;
+
+          let speedStr: string;
+          if (bytesPerSec > 1024 * 1024) {
+            speedStr = `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+          } else if (bytesPerSec > 1024) {
+            speedStr = `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+          } else {
+            speedStr = `${bytesPerSec.toFixed(0)} B/s`;
+          }
+          setUploadSpeed(speedStr);
+
+          lastLoaded = event.loaded;
+          lastTime = now;
+        }
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          setUploadProgress(100);
+          setUploadedVideo(response);
+          setIsUploading(false);
+        } catch {
+          setIsUploading(false);
+          setError('Failed to parse server response');
+        }
+      } else {
+        setIsUploading(false);
+        try {
+          const errorData = JSON.parse(xhr.responseText);
+          setError(errorData.detail || `Upload failed: ${xhr.status}`);
+        } catch {
+          setError(`Upload failed: ${xhr.status} ${xhr.statusText}`);
+        }
+      }
+    });
+
+    xhr.addEventListener('error', () => {
       setIsUploading(false);
-    } catch (err) {
+      setError('Network error during upload');
+    });
+
+    xhr.addEventListener('abort', () => {
       setIsUploading(false);
-      setError(err instanceof Error ? err.message : 'Upload failed');
-    }
+      setError('Upload cancelled');
+    });
+
+    xhr.open('POST', `${apiBase}/upload`);
+    xhr.send(formData);
   };
 
   const handleStartProcessing = async () => {
@@ -166,13 +231,23 @@ export function VideoUpload({ onUploadComplete, onResumeReview }: VideoUploadPro
           {isUploading ? (
             <div>
               <p className="text-zinc-400 mb-3">Uploading...</p>
-              <div className="w-48 mx-auto bg-zinc-800 rounded-full h-2">
+              <div className="w-64 mx-auto bg-zinc-800 rounded-full h-2">
                 <div
                   className="bg-white h-2 rounded-full transition-all duration-200"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="text-sm text-zinc-500 mt-2">{uploadProgress}%</p>
+              <p className="text-sm text-zinc-500 mt-2">
+                {uploadProgress}%
+                {totalBytes > 0 && (
+                  <span className="ml-2">
+                    ({formatFileSize(uploadedBytes)} / {formatFileSize(totalBytes)})
+                  </span>
+                )}
+              </p>
+              {uploadSpeed && (
+                <p className="text-xs text-zinc-600 mt-1">{uploadSpeed}</p>
+              )}
             </div>
           ) : (
             <>
