@@ -47,3 +47,37 @@ button, [role="button"], a {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 }
+
+/* WaveSurfer region resize handles (v7 uses Shadow DOM with ::part) */
+::part(region-handle) {
+  width: 12px !important;
+  background: rgba(16, 185, 129, 0.9) !important;
+  cursor: ew-resize !important;
+  border-radius: 2px;
+}
+
+::part(region-handle):hover {
+  background: rgba(16, 185, 129, 1) !important;
+}
+
+/* Fallback for non-shadow DOM elements */
+.wavesurfer-handle {
+  width: 12px !important;
+  max-width: 12px !important;
+  background: rgba(16, 185, 129, 0.9) !important;
+  cursor: ew-resize !important;
+}
+
+.wavesurfer-handle:hover {
+  background: rgba(16, 185, 129, 1) !important;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
